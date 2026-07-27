@@ -1,0 +1,318 @@
+"use client";
+
+import * as React from "react";
+import Image from "next/image";
+import { GlobeIcon, LockIcon, UsersIcon } from "lucide-react";
+import { updateProfileAction } from "@/app/actions/profile";
+import { Field } from "@/components/forms/field";
+import { useActionForm } from "@/components/forms/use-action-form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { COUNTRY_OPTIONS } from "@/lib/countries";
+import type { EditableProfile } from "@/lib/dal/profiles";
+import { EARLIEST_PASSING_YEAR, LATEST_PASSING_YEAR } from "@/lib/validation";
+import { initialsOf } from "@/lib/utils";
+
+type ProfileFormProps = {
+  profile: EditableProfile;
+  departments: Array<{ id: string; name: string }>;
+  email: string;
+};
+
+const VISIBILITY_OPTIONS = [
+  {
+    value: "PUBLIC",
+    icon: GlobeIcon,
+    title: "Public",
+    description: "Anyone with the link can see your profile, including signed-out visitors.",
+  },
+  {
+    value: "MEMBERS_ONLY",
+    icon: UsersIcon,
+    title: "Verified alumni only",
+    description: "Only members whose SSC details have been approved can see your profile.",
+  },
+  {
+    value: "PRIVATE",
+    icon: LockIcon,
+    title: "Hidden",
+    description: "You are removed from the directory. Only you and administrators can see it.",
+  },
+] as const;
+
+export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
+  const [preview, setPreview] = React.useState<string | null>(null);
+  const { formRef, formAction, pending, formError, fieldError, fieldErrorSummary } =
+    useActionForm(updateProfileAction);
+
+  return (
+    <form ref={formRef} action={formAction} className="space-y-6">
+      {formError || fieldErrorSummary ? (
+        <Alert variant="destructive">
+          <AlertDescription>{formError ?? fieldErrorSummary}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Basics</CardTitle>
+          <CardDescription>How you appear in the directory.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-4">
+            <span className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground">
+              {preview ? (
+                <Image src={preview} alt="" fill sizes="64px" className="object-cover" />
+              ) : profile.avatarUrl ? (
+                <Image
+                  src={profile.avatarUrl}
+                  alt=""
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                />
+              ) : (
+                initialsOf(profile.displayName)
+              )}
+            </span>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="avatar">Profile photo</Label>
+              <Input
+                id="avatar"
+                name="avatar"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="max-w-72"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  setPreview(file ? URL.createObjectURL(file) : null);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">Optional. JPG, PNG or WebP, up to 5 MB.</p>
+              {fieldError("avatar") ? (
+                <p className="text-xs font-medium text-destructive">{fieldError("avatar")}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <Field name="displayName" label="Display name" error={fieldError("displayName")} required>
+            <Input
+              id="displayName"
+              name="displayName"
+              defaultValue={profile.displayName}
+              required
+            />
+          </Field>
+
+          <Field
+            name="headline"
+            label="Headline"
+            error={fieldError("headline")}
+            hint="One line summary, e.g. Software engineer at bKash."
+          >
+            <Input
+              id="headline"
+              name="headline"
+              defaultValue={profile.headline ?? ""}
+              maxLength={120}
+            />
+          </Field>
+
+          <Field name="bio" label="About" error={fieldError("bio")}>
+            <Textarea
+              id="bio"
+              name="bio"
+              rows={5}
+              defaultValue={profile.bio ?? ""}
+              maxLength={1000}
+              placeholder="What you have been up to, and what you are happy to be contacted about."
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Education</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field
+            name="graduationYear"
+            label="SSC passing year"
+            error={fieldError("graduationYear")}
+          >
+            <Input
+              id="graduationYear"
+              name="graduationYear"
+              type="number"
+              min={EARLIEST_PASSING_YEAR}
+              max={LATEST_PASSING_YEAR}
+              defaultValue={profile.graduationYear ?? ""}
+            />
+          </Field>
+
+          <Field name="departmentId" label="Group / department" error={fieldError("departmentId")}>
+            <select
+              id="departmentId"
+              name="departmentId"
+              defaultValue={profile.departmentId ?? ""}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Not specified</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            name="degree"
+            label="Highest degree"
+            error={fieldError("degree")}
+            hint="Later qualifications, e.g. BSc in Civil Engineering."
+            className="sm:col-span-2"
+          >
+            <Input id="degree" name="degree" defaultValue={profile.degree ?? ""} maxLength={80} />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Work and links</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field name="company" label="Employer" error={fieldError("company")}>
+            <Input id="company" name="company" defaultValue={profile.company ?? ""} maxLength={120} />
+          </Field>
+
+          <Field name="position" label="Role" error={fieldError("position")}>
+            <Input
+              id="position"
+              name="position"
+              defaultValue={profile.position ?? ""}
+              maxLength={120}
+            />
+          </Field>
+
+          <Field name="city" label="City" error={fieldError("city")}>
+            <Input id="city" name="city" defaultValue={profile.city ?? ""} maxLength={80} />
+          </Field>
+
+          <Field name="countryCode" label="Country" error={fieldError("countryCode")}>
+            <select
+              id="countryCode"
+              name="countryCode"
+              defaultValue={profile.countryCode ?? ""}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Not specified</option>
+              {COUNTRY_OPTIONS.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field name="linkedInUrl" label="LinkedIn" error={fieldError("linkedInUrl")}>
+            <Input
+              id="linkedInUrl"
+              name="linkedInUrl"
+              type="url"
+              defaultValue={profile.linkedInUrl ?? ""}
+              placeholder="https://www.linkedin.com/in/..."
+            />
+          </Field>
+
+          <Field name="websiteUrl" label="Website" error={fieldError("websiteUrl")}>
+            <Input
+              id="websiteUrl"
+              name="websiteUrl"
+              type="url"
+              defaultValue={profile.websiteUrl ?? ""}
+              placeholder="https://..."
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Privacy</CardTitle>
+          <CardDescription>
+            Visibility controls who can open your profile. The switches control individual
+            fields independently.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <RadioGroup name="visibility" defaultValue={profile.visibility} className="gap-3">
+            {VISIBILITY_OPTIONS.map((option) => (
+              <Label
+                key={option.value}
+                htmlFor={`visibility-${option.value}`}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-accent/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+              >
+                <RadioGroupItem
+                  id={`visibility-${option.value}`}
+                  value={option.value}
+                  className="mt-0.5"
+                />
+                <span className="space-y-1">
+                  <span className="flex items-center gap-2 font-medium">
+                    <option.icon className="size-4" />
+                    {option.title}
+                  </span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {option.description}
+                  </span>
+                </span>
+              </Label>
+            ))}
+          </RadioGroup>
+
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="showEmail">Show my email address</Label>
+                <p className="text-xs text-muted-foreground">
+                  {email} — shown only to verified alumni, never to signed-out visitors.
+                </p>
+              </div>
+              <Switch id="showEmail" name="showEmail" defaultChecked={profile.showEmail} />
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="showEmployer">Show my employer and role</Label>
+                <p className="text-xs text-muted-foreground">
+                  Hide this if your current job should not be listed publicly.
+                </p>
+              </div>
+              <Switch
+                id="showEmployer"
+                name="showEmployer"
+                defaultChecked={profile.showEmployer}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end gap-3">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving..." : "Save profile"}
+        </Button>
+      </div>
+    </form>
+  );
+}

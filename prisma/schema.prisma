@@ -1,0 +1,222 @@
+// Alumni network schema.
+//
+// Three things in here cannot be expressed by Prisma and are created by hand in
+// prisma/migrations/0_init/migration.sql:
+//   1. Profile.searchVector as a GENERATED ALWAYS ... STORED tsvector column + GIN index
+//   2. The pg_trgm extension and a trigram index on Profile.displayName
+//   3. A partial unique index on VerificationRequest rows whose status is VERIFIED
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (pgbouncer, port 6543) used by the application runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432); Prisma Migrate cannot run through pgbouncer.
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MODERATOR
+  ALUMNI
+}
+
+enum UserStatus {
+  /// Account created, SSC details not submitted yet.
+  UNVERIFIED
+  /// SSC details submitted, waiting on an admin decision.
+  PENDING
+  /// Approved by an admin. Only this status can read alumni data.
+  VERIFIED
+  /// Rejected by an admin, may resubmit.
+  REJECTED
+}
+
+enum Visibility {
+  /// Visible to anyone, including signed-out visitors.
+  PUBLIC
+  /// Visible only to verified alumni.
+  MEMBERS_ONLY
+  /// Visible only to the owner and admins.
+  PRIVATE
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  role          Role       @default(ALUMNI)
+  status        UserStatus @default(UNVERIFIED)
+  deletedAt     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  profile       Profile?
+  verifications VerificationRequest[]
+  reviewed      VerificationRequest[] @relation("ReviewedBy")
+  accounts      Account[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  resetTokens   PasswordResetToken[]
+
+  @@index([status])
+  @@index([role])
+}
+
+/// One row per submission attempt. Rejected attempts are kept so the admin has history
+/// and the user can see why they were turned down.
+model VerificationRequest {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sscRoll         String
+  sscRegistration String
+  passingYear     Int
+  fullNameOnCert  String
+  /// Object path inside the private Supabase Storage bucket. Signed on read, never public.
+  documentPath    String?
+  status          UserStatus @default(PENDING)
+  reviewedById    String?
+  reviewedBy      User?      @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  /// Required when rejecting. Surfaced to the user on their status page.
+  reviewNote      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@index([status, createdAt])
+  @@index([passingYear])
+  @@index([userId, createdAt])
+  @@index([sscRoll, sscRegistration, passingYear])
+}
+
+model Department {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  sortkey  Int       @default(0)
+  profiles Profile[]
+}
+
+model Profile {
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug           String     @unique
+  displayName    String
+  headline       String?
+  bio            String?
+  avatarUrl      String?
+
+  graduationYear Int?
+  degree         String?
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  company        String?
+  position       String?
+  linkedInUrl    String?
+  websiteUrl     String?
+
+  city           String?
+  /// ISO 3166-1 alpha-2. A controlled vocabulary keeps the country facet usable.
+  countryCode    String?    @db.Char(2)
+
+  visibility     Visibility @default(MEMBERS_ONLY)
+  showEmail      Boolean    @default(false)
+  showEmployer   Boolean    @default(true)
+
+  /// Generated column maintained by Postgres; see the init migration. Prisma never writes it.
+  searchVector   Unsupported("tsvector")?
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([graduationYear])
+  @@index([departmentId])
+  @@index([countryCode])
+  @@index([visibility])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 of the token. The plaintext only ever exists in the email link.
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Database-backed rate limiting. Postgres is already a dependency, so this avoids adding
+/// Redis for the handful of endpoints that need throttling at this scale.
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  bucket    String
+  createdAt DateTime @default(now())
+
+  @@index([bucket, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Auth.js (@auth/prisma-adapter) tables
+// ---------------------------------------------------------------------------
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
