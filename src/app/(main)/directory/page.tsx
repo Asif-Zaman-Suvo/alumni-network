@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { SearchXIcon } from "lucide-react";
-import { AlumniCard } from "@/components/directory/alumni-card";
 import { DirectoryFilters } from "@/components/directory/directory-filters";
+import { DirectoryResults } from "@/components/directory/directory-results";
 import { Pagination } from "@/components/directory/pagination";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DEFAULT_PAGE_SIZE,
@@ -42,8 +40,6 @@ function parseYear(value: string | undefined): number | undefined {
 export default async function DirectoryPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
-  // Redirects PENDING and REJECTED users; the DAL independently returns nothing for them.
-  // getViewer is React.cache'd — header + this gate + DAL share one auth() per request.
   await requireDirectoryAccess();
 
   const searchParams = await props.searchParams;
@@ -51,8 +47,6 @@ export default async function DirectoryPage(props: {
     ? (searchParams.sort as DirectorySort)
     : undefined;
 
-  // Was sequential (facets → search). Facets are cached; search is the only cold path.
-  // Running both together removes the waterfall when the filter-options cache is cold.
   const [filterOptions, result] = await Promise.all([
     getDirectoryFilterOptions(),
     searchDirectory({
@@ -74,11 +68,22 @@ export default async function DirectoryPage(props: {
     if (value && key !== "page") baseParams.set(key, value);
   }
 
+  const resultsKey = [
+    searchParams.q ?? "",
+    searchParams.department ?? "",
+    searchParams.yearFrom ?? "",
+    searchParams.yearTo ?? "",
+    searchParams.country ?? "",
+    searchParams.sort ?? "",
+    searchParams.view ?? "grid",
+    searchParams.page ?? "1",
+  ].join("|");
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Alumni directory</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground" aria-live="polite">
           {result.total.toLocaleString()} verified{" "}
           {result.total === 1 ? "member" : "members"}
           {result.totalPages > 1 ? ` · page ${result.page} of ${result.totalPages}` : ""}
@@ -95,30 +100,9 @@ export default async function DirectoryPage(props: {
         />
       </Suspense>
 
-      {result.entries.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <SearchXIcon className="size-8 text-muted-foreground" />
-            <p className="font-medium">No alumni match those filters</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Try a shorter search term, or widen the batch range. Members who set their
-              profile to private do not appear here.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div
-          className={
-            view === "grid"
-              ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              : "flex flex-col gap-3"
-          }
-        >
-          {result.entries.map((entry) => (
-            <AlumniCard key={entry.slug} entry={entry} view={view} />
-          ))}
-        </div>
-      )}
+      <Suspense fallback={<ResultsSkeleton view={view} />}>
+        <DirectoryResults entries={result.entries} view={view} resultsKey={resultsKey} />
+      </Suspense>
 
       <Pagination
         page={result.page}
@@ -132,13 +116,41 @@ export default async function DirectoryPage(props: {
 
 function FiltersSkeleton() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-busy="true" aria-label="Loading filters">
       <Skeleton className="h-9 w-full" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
           <Skeleton key={index} className="h-9" />
         ))}
       </div>
+    </div>
+  );
+}
+
+function ResultsSkeleton({ view }: { view: "grid" | "list" }) {
+  return (
+    <div
+      className={
+        view === "grid"
+          ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          : "flex flex-col gap-3"
+      }
+      aria-busy="true"
+      aria-label="Loading alumni"
+    >
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="space-y-3 rounded-xl border border-border p-6">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-14 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-4/5" />
+        </div>
+      ))}
     </div>
   );
 }
