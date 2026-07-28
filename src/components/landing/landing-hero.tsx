@@ -1,58 +1,70 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useReducedMotion } from "motion/react";
-import { ArrowRightIcon, ShieldCheckIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CountUpStat } from "@/components/motion/count-up";
 import { FadeIn } from "@/components/motion/fade-in";
-import type { NetworkStats } from "@/lib/dal/profiles";
 
 type LandingHeroProps = {
   school: string;
   isVerified: boolean;
-  stats: NetworkStats;
 };
 
-export function LandingHero({ school, isVerified, stats }: LandingHeroProps) {
+/**
+ * Full-bleed campus hero. Brand is the primary signal; one headline, one line of support,
+ * one CTA group. Stats live in the next section so the first viewport stays uncluttered.
+ */
+export function LandingHero({ school, isVerified }: LandingHeroProps) {
   const reduce = useReducedMotion();
 
   return (
-    <section className="relative overflow-hidden border-b border-border">
-      {/* Soft primary wash — uses token, not a purple gradient stack */}
+    <section className="relative isolate min-h-[min(88dvh,52rem)] overflow-hidden">
+      <Image
+        src="/images/campus.jpg"
+        alt={`${school} campus building`}
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover object-[center_35%]"
+      />
+
+      {/* Readable scrim — warm dark from left/bottom, not a purple wash */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,var(--color-primary)/8,transparent_55%)]"
+        className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/55 to-black/25"
+        aria-hidden
+      />
+      <div
+        className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20"
         aria-hidden
       />
 
-      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:py-28">
-        <FadeIn immediate y={reduce ? 0 : 20}>
-          <Badge variant="outline" className="mb-5 sm:mb-6">
-            <ShieldCheckIcon aria-hidden />
-            Verified alumni only
-          </Badge>
+      <div className="relative mx-auto flex min-h-[min(88dvh,52rem)] max-w-6xl flex-col justify-end px-4 pb-14 pt-28 sm:px-6 sm:pb-20 sm:pt-32">
+        <FadeIn immediate y={reduce ? 0 : 18}>
+          <p className="text-sm font-medium tracking-wide text-white/85 sm:text-base">
+            {school} Alumni
+          </p>
         </FadeIn>
 
         <FadeIn immediate delay={0.06} y={reduce ? 0 : 22}>
-          <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-            Find the {school} graduates you lost touch with.
+          <h1 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight text-balance text-white sm:text-4xl lg:text-5xl">
+            Find the classmates you lost touch with.
           </h1>
         </FadeIn>
 
-        <FadeIn immediate delay={0.12} y={reduce ? 0 : 18}>
-          <p className="mt-4 max-w-xl text-base text-muted-foreground sm:mt-5 sm:text-lg">
-            A directory of former students, kept trustworthy by manual verification. No open
-            sign-ups, no scraped profiles, no strangers.
+        <FadeIn immediate delay={0.12} y={reduce ? 0 : 16}>
+          <p className="mt-4 max-w-lg text-base text-white/80 sm:text-lg">
+            A verified directory of former students — no open sign-ups, no scraped profiles.
           </p>
         </FadeIn>
 
         <FadeIn immediate delay={0.18}>
-          <div className="mt-7 flex flex-wrap gap-3 sm:mt-8">
+          <div className="mt-8 flex flex-wrap gap-3">
             {isVerified ? (
               <Button
                 size="lg"
-                className="motion-safe:transition-transform motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]"
+                className="bg-white text-foreground hover:bg-white/90 motion-safe:transition-transform motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]"
                 asChild
               >
                 <Link href="/directory">
@@ -64,7 +76,7 @@ export function LandingHero({ school, isVerified, stats }: LandingHeroProps) {
               <>
                 <Button
                   size="lg"
-                  className="motion-safe:transition-transform motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]"
+                  className="bg-white text-foreground hover:bg-white/90 motion-safe:transition-transform motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]"
                   asChild
                 >
                   <Link href="/register">
@@ -72,33 +84,18 @@ export function LandingHero({ school, isVerified, stats }: LandingHeroProps) {
                     <ArrowRightIcon aria-hidden />
                   </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                  asChild
+                >
                   <Link href="/login">I already have an account</Link>
                 </Button>
               </>
             )}
           </div>
         </FadeIn>
-
-        {stats.verifiedAlumni > 0 ? (
-          <FadeIn immediate delay={0.24} className="mt-12 sm:mt-16">
-            <dl
-              className="grid max-w-2xl grid-cols-2 gap-6 sm:grid-cols-3 sm:gap-8"
-              aria-label="Network snapshot"
-            >
-              <CountUpStat value={stats.verifiedAlumni} label="Verified alumni" />
-              <CountUpStat value={stats.countries} label="Countries" />
-              {stats.earliestYear && stats.latestYear ? (
-                <div className="col-span-2 sm:col-span-1">
-                  <dt className="text-sm text-muted-foreground">Batches</dt>
-                  <dd className="mt-1 text-3xl font-semibold tabular-nums">
-                    {stats.earliestYear}–{stats.latestYear}
-                  </dd>
-                </div>
-              ) : null}
-            </dl>
-          </FadeIn>
-        ) : null}
       </div>
     </section>
   );
