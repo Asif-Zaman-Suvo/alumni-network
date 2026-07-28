@@ -78,6 +78,11 @@ export const proxy = auth((request) => {
     return NextResponse.next();
   }
 
+  // Session claim refresh after admin approval — must run for PENDING JWTs.
+  if (pathname === "/api/session/sync") {
+    return NextResponse.next();
+  }
+
   if (!isAllowedForStatus(pathname, status)) {
     return redirect(
       homeForStatus(status, { profileComplete, isStaff }),

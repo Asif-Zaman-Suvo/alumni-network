@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { ClockIcon, FileTextIcon, TriangleAlertIcon } from "lucide-react";
 import { SscForm } from "@/components/verification/ssc-form";
@@ -8,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getOwnVerificationState } from "@/lib/dal/verification";
-import { requireViewer } from "@/lib/dal/session";
+import { requireViewerWithFreshStatus } from "@/lib/dal/session";
 
 export const metadata: Metadata = {
   title: "Verification status",
@@ -16,9 +15,9 @@ export const metadata: Metadata = {
 };
 
 export default async function VerificationStatusPage() {
-  const viewer = await requireViewer();
-  if (viewer.isVerified) redirect("/directory");
-  if (viewer.status === "UNVERIFIED") redirect("/onboarding");
+  // Sync JWT with DB so an admin approval in another session is visible on refresh.
+  const viewer = await requireViewerWithFreshStatus();
+  // VERIFIED / UNVERIFIED already redirected inside requireViewerWithFreshStatus.
 
   const state = await getOwnVerificationState();
   const latest = state.latest;

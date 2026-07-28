@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import type { Role, UserStatus } from "@prisma/client";
 
 export type Viewer = {
@@ -45,6 +46,42 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
 export async function requireViewer(): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
+  return viewer;
+}
+
+/**
+ * When the JWT still says PENDING/REJECTED/UNVERIFIED, compare with Postgres.
+ * Cookie updates cannot run in a Server Component — if claims drifted, bounce through
+ * `/api/session/sync` (Route Handler) which refreshes the JWT then redirects home.
+ */
+export async function requireViewerWithFreshStatus(): Promise<Viewer> {
+  const viewer = await requireViewer();
+  if (viewer.isVerified) return viewer;
+
+  const fresh = await prisma.user.findUnique({
+    where: { id: viewer.id },
+    select: {
+      status: true,
+      profileComplete: true,
+      emailVerified: true,
+      deletedAt: true,
+    },
+  });
+
+  if (!fresh || fresh.deletedAt) redirect("/login");
+
+  const emailVerified = Boolean(fresh.emailVerified);
+  const claimsChanged =
+    fresh.status !== viewer.status ||
+    fresh.profileComplete !== viewer.profileComplete ||
+    emailVerified !== viewer.emailVerified;
+
+  if (claimsChanged) {
+    redirect("/api/session/sync");
+  }
+
+  if (fresh.status === "UNVERIFIED") redirect("/onboarding");
+
   return viewer;
 }
 
