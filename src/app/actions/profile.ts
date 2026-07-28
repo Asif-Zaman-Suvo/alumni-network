@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { unstable_update } from "@/auth";
 import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
@@ -69,10 +70,19 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       departmentId: data.departmentId ?? null,
       company: data.company ?? null,
       position: data.position ?? null,
+      whatsappPhone: data.whatsappPhone,
+      facebookUrl: data.facebookUrl,
       linkedInUrl: data.linkedInUrl ?? null,
       websiteUrl: data.websiteUrl ?? null,
       city: data.city ?? null,
       countryCode: data.countryCode ?? null,
+      collegeName: data.collegeName ?? null,
+      collegeDepartment: data.collegeDepartment ?? null,
+      collegeSession: data.collegeSession ?? null,
+      hscPassingYear: data.hscPassingYear ?? null,
+      universityName: data.universityName ?? null,
+      universityDepartment: data.universityDepartment ?? null,
+      universitySession: data.universitySession ?? null,
       visibility: data.visibility,
       showEmail: data.showEmail,
       showEmployer: data.showEmployer,
@@ -80,12 +90,28 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     },
   });
 
+  const profileComplete = Boolean(data.whatsappPhone?.trim() && data.facebookUrl?.trim());
+  await prisma.user.update({
+    where: { id: viewer.id },
+    data: { profileComplete },
+  });
+
+  // Refresh JWT so proxy/directory gates see profileComplete without waiting for hourly refresh.
+  await unstable_update({
+    user: { profileComplete },
+  });
+
   revalidatePath("/settings/profile");
   revalidatePath(`/profile/${existing.slug}`);
   revalidatePath("/directory");
   revalidateTag(DIRECTORY_FILTER_OPTIONS_TAG, "max");
 
-  return actionOk(undefined, "Profile saved.");
+  return actionOk(
+    undefined,
+    profileComplete
+      ? "Profile saved."
+      : "Profile saved. Add WhatsApp and Facebook to unlock the directory.",
+  );
 }
 
 export type PersonalDataExport = {
@@ -106,10 +132,19 @@ export type PersonalDataExport = {
     degree: string | null;
     company: string | null;
     position: string | null;
+    whatsappPhone: string | null;
     linkedInUrl: string | null;
+    facebookUrl: string | null;
     websiteUrl: string | null;
     city: string | null;
     countryCode: string | null;
+    collegeName: string | null;
+    collegeDepartment: string | null;
+    collegeSession: string | null;
+    hscPassingYear: number | null;
+    universityName: string | null;
+    universityDepartment: string | null;
+    universitySession: string | null;
     visibility: string;
     showEmail: boolean;
     showEmployer: boolean;
@@ -149,10 +184,19 @@ export async function exportOwnDataAction(): Promise<ActionResult<PersonalDataEx
           degree: true,
           company: true,
           position: true,
+          whatsappPhone: true,
           linkedInUrl: true,
+          facebookUrl: true,
           websiteUrl: true,
           city: true,
           countryCode: true,
+          collegeName: true,
+          collegeDepartment: true,
+          collegeSession: true,
+          hscPassingYear: true,
+          universityName: true,
+          universityDepartment: true,
+          universitySession: true,
           visibility: true,
           showEmail: true,
           showEmployer: true,
@@ -220,11 +264,20 @@ export async function deleteOwnAccountAction(): Promise<ActionResult> {
           avatarUrl: null,
           company: null,
           position: null,
+          whatsappPhone: null,
           linkedInUrl: null,
+          facebookUrl: null,
           websiteUrl: null,
           city: null,
           countryCode: null,
           degree: null,
+          collegeName: null,
+          collegeDepartment: null,
+          collegeSession: null,
+          hscPassingYear: null,
+          universityName: null,
+          universityDepartment: null,
+          universitySession: null,
           visibility: "PRIVATE",
           showEmail: false,
           showEmployer: false,

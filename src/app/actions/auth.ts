@@ -6,10 +6,16 @@ import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/auth";
 import { clientEnv } from "@/env";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
-import { sendPasswordReset } from "@/lib/email";
+import { sendEmailVerification, sendPasswordReset } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { consumeRateLimit, formatRetryAfter, RATE_LIMITS } from "@/lib/rate-limit";
-import { createToken, hashToken, PASSWORD_RESET_TTL_MS } from "@/lib/tokens";
+import {
+  createToken,
+  hashToken,
+  EMAIL_VERIFICATION_TTL_MS,
+  PASSWORD_RESET_TTL_MS,
+} from "@/lib/tokens";
+import { getViewer } from "@/lib/dal/session";
 import { slugify } from "@/lib/utils";
 import {
   forgotPasswordSchema,
@@ -79,6 +85,20 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
   });
 
   await signIn("credentials", { email, password, redirect: false });
+
+  // Non-blocking: ownership can be confirmed later via "Verify now".
+  const { token, tokenHash } = createToken();
+  await prisma.verificationToken.create({
+    data: {
+      identifier: email,
+      token: tokenHash,
+      expires: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+    },
+  });
+  await sendEmailVerification(
+    email,
+    `${clientEnv.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}&email=${encodeURIComponent(email)}`,
+  );
 
   return actionOk(undefined, "Account created. Your verification request is with our team.");
 }
@@ -200,6 +220,41 @@ export async function resetPasswordAction(formData: FormData): Promise<ActionRes
   ]);
 
   return actionOk(undefined, "Password updated. You can sign in now.");
+}
+
+/** Sends (or resends) an email confirmation link. Does not block app use. */
+export async function requestEmailVerificationAction(): Promise<ActionResult> {
+  const viewer = await getViewer();
+  if (!viewer) return actionError("Please sign in again.");
+  if (viewer.emailVerified) return actionOk(undefined, "Your email is already verified.");
+
+  const limit = await consumeRateLimit({
+    bucket: `email-verify:${viewer.id}`,
+    ...RATE_LIMITS.passwordReset,
+  });
+  if (!limit.ok) {
+    return actionError(
+      `Too many attempts. Try again in ${formatRetryAfter(limit.retryAfterSeconds)}.`,
+    );
+  }
+
+  await prisma.verificationToken.deleteMany({ where: { identifier: viewer.email } });
+
+  const { token, tokenHash } = createToken();
+  await prisma.verificationToken.create({
+    data: {
+      identifier: viewer.email,
+      token: tokenHash,
+      expires: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
+    },
+  });
+
+  await sendEmailVerification(
+    viewer.email,
+    `${clientEnv.NEXT_PUBLIC_APP_URL}/verify-email?token=${token}&email=${encodeURIComponent(viewer.email)}`,
+  );
+
+  return actionOk(undefined, "Check your inbox for a confirmation link.");
 }
 
 /** Profile slugs are user-visible URLs, so collisions are resolved with a numeric suffix. */

@@ -24,7 +24,7 @@ import { loginSchema } from "@/lib/validation";
  */
 const TOKEN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -46,6 +46,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             passwordHash: true,
             role: true,
             status: true,
+            emailVerified: true,
+            profileComplete: true,
             deletedAt: true,
             profile: { select: { displayName: true, avatarUrl: true } },
           },
@@ -65,6 +67,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           image: user.profile?.avatarUrl ?? null,
           role: user.role,
           status: user.status,
+          emailVerified: user.emailVerified,
+          profileComplete: user.profileComplete,
         };
       },
     }),
@@ -78,6 +82,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (user.status) token.status = user.status;
         if (user.name !== undefined) token.name = user.name;
         if (user.image !== undefined) token.picture = user.image;
+        token.isEmailVerified = Boolean(
+          "emailVerified" in user ? user.emailVerified : false,
+        );
+        token.profileComplete = Boolean(user.profileComplete);
 
         // OAuth first login may omit role/status on the user object — one DB read then.
         if (!token.role || !token.status) {
@@ -86,6 +94,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             select: {
               role: true,
               status: true,
+              emailVerified: true,
+              profileComplete: true,
               deletedAt: true,
               profile: { select: { displayName: true, avatarUrl: true } },
             },
@@ -93,6 +103,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (!fresh || fresh.deletedAt) return null;
           token.role = fresh.role;
           token.status = fresh.status;
+          token.isEmailVerified = Boolean(fresh.emailVerified);
+          token.profileComplete = fresh.profileComplete;
           token.name = fresh.profile?.displayName ?? token.name;
           token.picture = fresh.profile?.avatarUrl ?? token.picture;
         }
@@ -108,6 +120,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           select: {
             role: true,
             status: true,
+            emailVerified: true,
+            profileComplete: true,
             deletedAt: true,
             profile: { select: { displayName: true, avatarUrl: true } },
           },
@@ -118,6 +132,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         token.role = fresh.role;
         token.status = fresh.status;
+        token.isEmailVerified = Boolean(fresh.emailVerified);
+        token.profileComplete = fresh.profileComplete;
         token.name = fresh.profile?.displayName ?? token.name;
         token.picture = fresh.profile?.avatarUrl ?? token.picture;
         token.refreshedAt = Date.now();

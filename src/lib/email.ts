@@ -67,8 +67,8 @@ export function sendEmailVerification(to: string, url: string) {
     subject: "Confirm your email address",
     heading: "Confirm your email address",
     body: [
-      "You are one step away from submitting your alumni verification request.",
-      "This link expires in 24 hours.",
+      "Confirm this email so we can reach you about your alumni account.",
+      "You can keep using the app while this is pending. This link expires in 24 hours.",
     ],
     action: { label: "Confirm email", url },
   });
@@ -93,12 +93,12 @@ export function sendVerificationApproved(to: string, name: string) {
     subject: "Your alumni account has been approved",
     heading: `Welcome to the network, ${name}`,
     body: [
-      "An administrator has confirmed your SSC details. You now have full access to the alumni directory.",
-      "Take a minute to fill in your profile so batchmates can find you.",
+      "An administrator has confirmed your SSC details.",
+      "Before you can browse the directory, complete your profile with WhatsApp and Facebook (required), plus college/university details.",
     ],
     action: {
-      label: "Open the directory",
-      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/directory`,
+      label: "Complete your profile",
+      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/settings/profile?complete=1`,
     },
   });
 }

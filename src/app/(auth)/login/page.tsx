@@ -21,10 +21,16 @@ export default async function LoginPage(props: {
 
   const viewer = await getViewer();
   if (viewer) {
+    const home = homeForStatus(viewer.status, {
+      profileComplete: viewer.profileComplete,
+      isStaff: viewer.isStaff,
+    });
     const dest =
-      viewer.isVerified && searchParams.callbackUrl?.startsWith("/")
+      viewer.isVerified &&
+      viewer.profileComplete &&
+      searchParams.callbackUrl?.startsWith("/")
         ? searchParams.callbackUrl
-        : homeForStatus(viewer.status);
+        : home;
     redirect(dest);
   }
 

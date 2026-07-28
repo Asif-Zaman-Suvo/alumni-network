@@ -6,6 +6,7 @@ import { Field } from "@/components/forms/field";
 import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Input } from "@/components/ui/input";
 
 export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
@@ -35,10 +36,9 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
       </Field>
 
       <Field name="password" label="Password" error={fieldError("password")} required>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
         />

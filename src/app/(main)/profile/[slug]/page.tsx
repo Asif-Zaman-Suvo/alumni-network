@@ -10,14 +10,16 @@ import {
   LinkIcon,
   MailIcon,
   MapPinIcon,
+  MessageCircleIcon,
   PencilIcon,
+  UsersIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { countryName } from "@/lib/countries";
-import { getProfileBySlug } from "@/lib/dal/profiles";
+import { getProfileBySlug, type PublicProfile } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
 import { initialsOf } from "@/lib/utils";
 
@@ -57,12 +59,22 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
 
   const facts = [
     profile.graduationYear
-      ? { icon: GraduationCapIcon, label: `SSC ${profile.graduationYear}` }
+      ? { icon: GraduationCapIcon, label: `School · SSC ${profile.graduationYear}` }
       : null,
     profile.departmentName ? { icon: GraduationCapIcon, label: profile.departmentName } : null,
     role ? { icon: BriefcaseIcon, label: role } : null,
     location ? { icon: MapPinIcon, label: location } : null,
   ].filter((fact): fact is { icon: typeof GraduationCapIcon; label: string } => fact !== null);
+
+  const educationRows = buildEducationRows(profile);
+  const hasWork = Boolean(profile.company || profile.position);
+  const hasContact = Boolean(
+    profile.email ||
+      profile.whatsappPhone ||
+      profile.facebookUrl ||
+      profile.linkedInUrl ||
+      profile.websiteUrl,
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -129,53 +141,110 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
           {profile.bio ? (
             <>
               <Separator className="my-6" />
-              <p className="whitespace-pre-line text-sm leading-relaxed">{profile.bio}</p>
-            </>
-          ) : null}
-
-          {profile.degree ? (
-            <>
-              <Separator className="my-6" />
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Education
+                  About
                 </h2>
-                <p className="text-sm">
-                  {profile.degree}
-                  {profile.departmentName ? ` · ${profile.departmentName}` : ""}
-                </p>
+                <p className="whitespace-pre-line text-sm leading-relaxed">{profile.bio}</p>
               </div>
             </>
           ) : null}
 
-          {profile.email || profile.linkedInUrl || profile.websiteUrl ? (
+          {educationRows.length > 0 ? (
             <>
               <Separator className="my-6" />
-              <div className="flex flex-wrap gap-2">
-                {profile.email ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={`mailto:${profile.email}`}>
-                      <MailIcon />
-                      {profile.email}
-                    </a>
-                  </Button>
+              <div className="space-y-4">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Education
+                </h2>
+                <dl className="space-y-4">
+                  {educationRows.map((row) => (
+                    <div key={row.label} className="space-y-1">
+                      <dt className="text-sm font-medium">{row.label}</dt>
+                      <dd className="text-sm text-muted-foreground">{row.detail}</dd>
+                      {row.meta ? (
+                        <dd className="text-xs text-muted-foreground">{row.meta}</dd>
+                      ) : null}
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          ) : null}
+
+          {hasWork ? (
+            <>
+              <Separator className="my-6" />
+              <div className="space-y-2">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Work
+                </h2>
+                <p className="text-sm">
+                  {[profile.position, profile.company].filter(Boolean).join(" at ")}
+                </p>
+                {location ? (
+                  <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <MapPinIcon className="size-3.5 shrink-0" />
+                    {location}
+                  </p>
                 ) : null}
-                {profile.linkedInUrl ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={profile.linkedInUrl} target="_blank" rel="noopener noreferrer">
-                      <LinkIcon />
-                      LinkedIn
-                    </a>
-                  </Button>
-                ) : null}
-                {profile.websiteUrl ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer">
-                      <GlobeIcon />
-                      Website
-                    </a>
-                  </Button>
-                ) : null}
+              </div>
+            </>
+          ) : null}
+
+          {hasContact ? (
+            <>
+              <Separator className="my-6" />
+              <div className="space-y-3">
+                <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Contact & links
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {profile.email ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={`mailto:${profile.email}`}>
+                        <MailIcon />
+                        {profile.email}
+                      </a>
+                    </Button>
+                  ) : null}
+                  {profile.whatsappPhone ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a
+                        href={`https://wa.me/${profile.whatsappPhone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <MessageCircleIcon />
+                        WhatsApp
+                      </a>
+                    </Button>
+                  ) : null}
+                  {profile.facebookUrl ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={profile.facebookUrl} target="_blank" rel="noopener noreferrer">
+                        <UsersIcon />
+                        Facebook
+                      </a>
+                    </Button>
+                  ) : null}
+                  {profile.linkedInUrl ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={profile.linkedInUrl} target="_blank" rel="noopener noreferrer">
+                        <LinkIcon />
+                        LinkedIn
+                      </a>
+                    </Button>
+                  ) : null}
+                  {profile.websiteUrl ? (
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer">
+                        <GlobeIcon />
+                        Website
+                      </a>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             </>
           ) : null}
@@ -206,4 +275,56 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
       ) : null}
     </div>
   );
+}
+
+function buildEducationRows(profile: PublicProfile) {
+  const rows: Array<{ label: string; detail: string; meta?: string }> = [];
+
+  const schoolParts = [
+    profile.graduationYear ? `SSC ${profile.graduationYear}` : null,
+    profile.departmentName,
+  ].filter(Boolean);
+  if (schoolParts.length > 0) {
+    rows.push({
+      label: "School",
+      detail: schoolParts.join(" · "),
+    });
+  }
+
+  if (
+    profile.collegeName ||
+    profile.collegeDepartment ||
+    profile.collegeSession ||
+    profile.hscPassingYear
+  ) {
+    const collegeDetail = [
+      profile.hscPassingYear ? `HSC ${profile.hscPassingYear}` : null,
+      profile.collegeName,
+      profile.collegeDepartment,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    rows.push({
+      label: "College",
+      detail: collegeDetail,
+      meta: profile.collegeSession ? `Session ${profile.collegeSession}` : undefined,
+    });
+  }
+
+  if (profile.universityName || profile.universityDepartment || profile.universitySession) {
+    rows.push({
+      label: "University",
+      detail: [profile.universityName, profile.universityDepartment].filter(Boolean).join(" · "),
+      meta: profile.universitySession ? `Session ${profile.universitySession}` : undefined,
+    });
+  }
+
+  if (profile.degree) {
+    rows.push({
+      label: "Highest degree",
+      detail: profile.degree,
+    });
+  }
+
+  return rows.filter((row) => row.detail.length > 0);
 }

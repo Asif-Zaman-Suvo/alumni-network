@@ -45,15 +45,17 @@ enum Visibility {
 }
 
 model User {
-  id            String     @id @default(cuid())
-  email         String     @unique
-  emailVerified DateTime?
-  passwordHash  String?
-  role          Role       @default(ALUMNI)
-  status        UserStatus @default(UNVERIFIED)
-  deletedAt     DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id              String     @id @default(cuid())
+  email           String     @unique
+  emailVerified   DateTime?
+  passwordHash    String?
+  role            Role       @default(ALUMNI)
+  status          UserStatus @default(UNVERIFIED)
+  /// False until WhatsApp phone + Facebook URL are saved (required after admin approval).
+  profileComplete Boolean    @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   profile       Profile?
   verifications VerificationRequest[]
@@ -118,12 +120,25 @@ model Profile {
 
   company        String?
   position       String?
+  /// WhatsApp-capable mobile number. Required before directory access after approval.
+  whatsappPhone  String?
   linkedInUrl    String?
+  facebookUrl    String?
   websiteUrl     String?
 
   city           String?
   /// ISO 3166-1 alpha-2. A controlled vocabulary keeps the country facet usable.
   countryCode    String?    @db.Char(2)
+
+  collegeName         String?
+  collegeDepartment   String?
+  /// Academic session label, e.g. 2018-19.
+  collegeSession      String?
+  /// HSC / intermediate passing year (college).
+  hscPassingYear      Int?
+  universityName      String?
+  universityDepartment String?
+  universitySession   String?
 
   visibility     Visibility @default(MEMBERS_ONLY)
   showEmail      Boolean    @default(false)

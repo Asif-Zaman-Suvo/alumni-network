@@ -15,7 +15,14 @@ export const metadata: Metadata = {
 
 export default async function RegisterPage() {
   const viewer = await getViewer();
-  if (viewer) redirect(homeForStatus(viewer.status));
+  if (viewer) {
+    redirect(
+      homeForStatus(viewer.status, {
+        profileComplete: viewer.profileComplete,
+        isStaff: viewer.isStaff,
+      }),
+    );
+  }
 
   return (
     <div className="space-y-6">

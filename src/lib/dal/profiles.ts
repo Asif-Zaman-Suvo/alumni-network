@@ -5,6 +5,7 @@ import {
   directoryVisibilityLevels,
 } from "@/lib/dal/privacy";
 import { getViewer, type Viewer } from "@/lib/dal/session";
+import { EDUCATION_GROUPS } from "@/lib/education-groups";
 import { consumeMemoryRateLimit } from "@/lib/memory-rate-limit";
 import { RATE_LIMITS } from "@/lib/rate-limit";
 import type { Visibility } from "@prisma/client";
@@ -134,8 +135,9 @@ function buildOrderBy(sort: DirectorySort, term: string | undefined): Prisma.Sql
 export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryResult> {
   const viewer = await getViewer();
 
-  // Unverified viewers get nothing from the list, regardless of how they reached this code.
+  // Unverified or incomplete alumni get nothing from the list.
   if (!viewer?.isVerified) return EMPTY_RESULT;
+  if (!viewer.isStaff && !viewer.profileComplete) return EMPTY_RESULT;
 
   const page = Math.max(1, Math.floor(query.page ?? 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(query.pageSize ?? DEFAULT_PAGE_SIZE)));
@@ -200,10 +202,19 @@ export type PublicProfile = {
   departmentName: string | null;
   company: string | null;
   position: string | null;
+  whatsappPhone: string | null;
+  facebookUrl: string | null;
   linkedInUrl: string | null;
   websiteUrl: string | null;
   city: string | null;
   countryCode: string | null;
+  collegeName: string | null;
+  collegeDepartment: string | null;
+  collegeSession: string | null;
+  hscPassingYear: number | null;
+  universityName: string | null;
+  universityDepartment: string | null;
+  universitySession: string | null;
   email: string | null;
   visibility: Visibility;
   isOwnProfile: boolean;
@@ -228,10 +239,19 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
       degree: true,
       company: true,
       position: true,
+      whatsappPhone: true,
+      facebookUrl: true,
       linkedInUrl: true,
       websiteUrl: true,
       city: true,
       countryCode: true,
+      collegeName: true,
+      collegeDepartment: true,
+      collegeSession: true,
+      hscPassingYear: true,
+      universityName: true,
+      universityDepartment: true,
+      universitySession: true,
       visibility: true,
       showEmail: true,
       showEmployer: true,
@@ -252,8 +272,9 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
   if (!access.allowed) return null;
 
   const showEmployer = profile.showEmployer || access.isOwnProfile;
-  // Email is only ever revealed to signed-in verified alumni, and only if opted in.
-  const showEmail = profile.showEmail && Boolean(viewer?.isVerified);
+  // Contact channels only for verified alumni (and the owner).
+  const showContact = Boolean(viewer?.isVerified) || access.isOwnProfile;
+  const showEmail = (profile.showEmail && Boolean(viewer?.isVerified)) || access.isOwnProfile;
 
   return {
     slug: profile.slug,
@@ -266,11 +287,20 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
     departmentName: profile.department?.name ?? null,
     company: showEmployer ? profile.company : null,
     position: showEmployer ? profile.position : null,
+    whatsappPhone: showContact ? profile.whatsappPhone : null,
+    facebookUrl: showContact ? profile.facebookUrl : null,
     linkedInUrl: profile.linkedInUrl,
     websiteUrl: profile.websiteUrl,
     city: profile.city,
     countryCode: profile.countryCode,
-    email: showEmail || access.isOwnProfile ? profile.user.email : null,
+    collegeName: profile.collegeName,
+    collegeDepartment: profile.collegeDepartment,
+    collegeSession: profile.collegeSession,
+    hscPassingYear: profile.hscPassingYear,
+    universityName: profile.universityName,
+    universityDepartment: profile.universityDepartment,
+    universitySession: profile.universitySession,
+    email: showEmail ? profile.user.email : null,
     visibility: profile.visibility,
     isOwnProfile: access.isOwnProfile,
   };
@@ -287,10 +317,19 @@ export type EditableProfile = {
   departmentId: string | null;
   company: string | null;
   position: string | null;
+  whatsappPhone: string | null;
+  facebookUrl: string | null;
   linkedInUrl: string | null;
   websiteUrl: string | null;
   city: string | null;
   countryCode: string | null;
+  collegeName: string | null;
+  collegeDepartment: string | null;
+  collegeSession: string | null;
+  hscPassingYear: number | null;
+  universityName: string | null;
+  universityDepartment: string | null;
+  universitySession: string | null;
   visibility: Visibility;
   showEmail: boolean;
   showEmployer: boolean;
@@ -313,10 +352,19 @@ export async function getOwnProfile(): Promise<EditableProfile | null> {
       departmentId: true,
       company: true,
       position: true,
+      whatsappPhone: true,
+      facebookUrl: true,
       linkedInUrl: true,
       websiteUrl: true,
       city: true,
       countryCode: true,
+      collegeName: true,
+      collegeDepartment: true,
+      collegeSession: true,
+      hscPassingYear: true,
+      universityName: true,
+      universityDepartment: true,
+      universitySession: true,
       visibility: true,
       showEmail: true,
       showEmployer: true,
@@ -325,8 +373,11 @@ export async function getOwnProfile(): Promise<EditableProfile | null> {
 }
 
 export async function listDepartments() {
-  const options = await getDirectoryFilterOptions();
-  return options.departments;
+  return prisma.department.findMany({
+    where: { name: { in: [...EDUCATION_GROUPS] } },
+    orderBy: { sortkey: "asc" },
+    select: { id: true, name: true },
+  });
 }
 
 export type DirectoryFacets = {
@@ -365,6 +416,7 @@ const loadDirectoryFilterOptions = unstable_cache(
             '[]'::json
           )
           FROM "Department" d
+          WHERE d."name" IN (${Prisma.join([...EDUCATION_GROUPS])})
         ) AS "departments",
         (
           SELECT COALESCE(json_agg("year" ORDER BY "year" DESC), '[]'::json)
@@ -412,6 +464,9 @@ const loadDirectoryFilterOptions = unstable_cache(
 export async function getDirectoryFilterOptions(): Promise<FilterOptionsPayload> {
   const viewer = await getViewer();
   if (!viewer?.isVerified) {
+    return { departments: [], years: [], countries: [] };
+  }
+  if (!viewer.isStaff && !viewer.profileComplete) {
     return { departments: [], years: [], countries: [] };
   }
   return loadDirectoryFilterOptions();

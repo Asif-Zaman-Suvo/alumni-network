@@ -12,7 +12,7 @@ import {
   searchDirectory,
   type DirectorySort,
 } from "@/lib/dal/profiles";
-import { requireVerifiedViewer } from "@/lib/dal/session";
+import { requireDirectoryAccess } from "@/lib/dal/session";
 
 export const metadata: Metadata = {
   title: "Alumni directory",
@@ -44,7 +44,7 @@ export default async function DirectoryPage(props: {
 }) {
   // Redirects PENDING and REJECTED users; the DAL independently returns nothing for them.
   // getViewer is React.cache'd — header + this gate + DAL share one auth() per request.
-  await requireVerifiedViewer();
+  await requireDirectoryAccess();
 
   const searchParams = await props.searchParams;
   const sort = SORTS.has(searchParams.sort as DirectorySort)

@@ -9,12 +9,7 @@ import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const DEPARTMENTS = [
-  "Science",
-  "Business Studies",
-  "Humanities",
-  "Vocational",
-] as const;
+const DEPARTMENTS = ["Science", "Business Studies", "Humanities"] as const;
 
 const FIRST_NAMES = [
   "Ayesha", "Rafi", "Nusrat", "Tanvir", "Sadia", "Imran", "Farhana", "Mahmud",
@@ -111,28 +106,51 @@ async function seedDepartments() {
     ),
   );
 
+  // Drop retired groups (e.g. Vocational) so SSC selects stay Science / Business / Humanities.
+  const retired = await prisma.department.findMany({
+    where: { name: { notIn: [...DEPARTMENTS] } },
+    select: { id: true },
+  });
+  if (retired.length > 0) {
+    const ids = retired.map((row) => row.id);
+    await prisma.profile.updateMany({
+      where: { departmentId: { in: ids } },
+      data: { departmentId: null },
+    });
+    await prisma.department.deleteMany({ where: { id: { in: ids } } });
+  }
+
   return prisma.department.findMany({ orderBy: { sortkey: "asc" } });
 }
 
 async function seedAdmin(passwordHash: string) {
   const admin = await prisma.user.upsert({
     where: { email: "admin@school.test" },
-    update: { role: "ADMIN", status: "VERIFIED" },
+    update: { role: "ADMIN", status: "VERIFIED", profileComplete: true },
     create: {
       email: "admin@school.test",
       passwordHash,
       role: "ADMIN",
       status: "VERIFIED",
       emailVerified: new Date(),
+      profileComplete: true,
       profile: {
         create: {
           slug: "school-admin",
           displayName: "School Admin",
           headline: "Alumni network administrator",
           visibility: Visibility.PRIVATE,
+          whatsappPhone: "+8801700000000",
+          facebookUrl: "https://www.facebook.com/shksc.admin",
         },
       },
     },
+  });
+
+  // Existing admin upserts may predate profileComplete.
+  await prisma.user.update({
+    where: { id: admin.id },
+    data: { profileComplete: true, role: "ADMIN", status: "VERIFIED" },
   });
 
   console.log(`  admin: admin@school.test / password: password123`);
@@ -175,6 +193,10 @@ function buildProfile(index: number, departmentIds: string[]): SeedProfile {
       company,
       position,
       linkedInUrl: maybe(`https://www.linkedin.com/in/${slugBase}-${index}`, 0.45),
+      whatsappPhone: `+88017${String(10000000 + index).slice(-8)}`,
+      facebookUrl: `https://www.facebook.com/${slugBase}.${index}`,
+      collegeName: maybe("Dhaka College", 0.5),
+      universityName: maybe("University of Dhaka", 0.45),
       city,
       countryCode,
       visibility: pick(VISIBILITIES),
@@ -197,6 +219,7 @@ async function seedVerifiedAlumni(passwordHash: string, departmentIds: string[],
         passwordHash,
         status: "VERIFIED",
         emailVerified: new Date(),
+        profileComplete: true,
         profile: { create: profile.data },
         verifications: {
           create: {
@@ -210,6 +233,11 @@ async function seedVerifiedAlumni(passwordHash: string, departmentIds: string[],
           },
         },
       },
+    });
+
+    await prisma.user.update({
+      where: { email: profile.email },
+      data: { profileComplete: true },
     });
   }
 

@@ -6,6 +6,7 @@ import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Separator } from "@/components/ui/separator";
 import { EARLIEST_PASSING_YEAR, LATEST_PASSING_YEAR } from "@/lib/validation";
 
@@ -55,10 +56,9 @@ export function RegisterForm() {
           hint="At least 10 characters, including a number."
           required
         >
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             required
           />

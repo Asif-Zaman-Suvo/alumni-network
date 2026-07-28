@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
 import type { EditableProfile } from "@/lib/dal/profiles";
+import { EDUCATION_GROUPS } from "@/lib/education-groups";
 import { EARLIEST_PASSING_YEAR, LATEST_PASSING_YEAR } from "@/lib/validation";
 import { initialsOf } from "@/lib/utils";
 
@@ -141,54 +142,228 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Education</CardTitle>
+          <CardDescription>School, college, and university details.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <p className="text-sm font-medium">School</p>
+              <p className="text-xs text-muted-foreground">Secondary school certificate.</p>
+            </div>
+            <Field
+              name="graduationYear"
+              label="SSC passing year"
+              error={fieldError("graduationYear")}
+            >
+              <Input
+                id="graduationYear"
+                name="graduationYear"
+                type="number"
+                min={EARLIEST_PASSING_YEAR}
+                max={LATEST_PASSING_YEAR}
+                defaultValue={profile.graduationYear ?? ""}
+              />
+            </Field>
+
+            <Field name="departmentId" label="Group / department" error={fieldError("departmentId")}>
+              <select
+                id="departmentId"
+                name="departmentId"
+                defaultValue={profile.departmentId ?? ""}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Not specified</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid gap-4 border-t border-border pt-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <p className="text-sm font-medium">College</p>
+              <p className="text-xs text-muted-foreground">Higher secondary / intermediate.</p>
+            </div>
+            <Field
+              name="hscPassingYear"
+              label="HSC passing year"
+              error={fieldError("hscPassingYear")}
+            >
+              <Input
+                id="hscPassingYear"
+                name="hscPassingYear"
+                type="number"
+                min={EARLIEST_PASSING_YEAR}
+                max={LATEST_PASSING_YEAR}
+                defaultValue={profile.hscPassingYear ?? ""}
+              />
+            </Field>
+            <Field
+              name="collegeDepartment"
+              label="Group / department"
+              error={fieldError("collegeDepartment")}
+            >
+              <select
+                id="collegeDepartment"
+                name="collegeDepartment"
+                defaultValue={profile.collegeDepartment ?? ""}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Not specified</option>
+                {EDUCATION_GROUPS.map((group) => (
+                  <option key={group} value={group}>
+                    {group}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field name="collegeName" label="College name" error={fieldError("collegeName")}>
+              <Input
+                id="collegeName"
+                name="collegeName"
+                defaultValue={profile.collegeName ?? ""}
+                maxLength={120}
+              />
+            </Field>
+            <Field
+              name="collegeSession"
+              label="Session"
+              error={fieldError("collegeSession")}
+              hint="e.g. 2018-19"
+            >
+              <Input
+                id="collegeSession"
+                name="collegeSession"
+                defaultValue={profile.collegeSession ?? ""}
+                maxLength={40}
+                placeholder="2018-19"
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 border-t border-border pt-6 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <p className="text-sm font-medium">University</p>
+              <p className="text-xs text-muted-foreground">Undergraduate or later studies.</p>
+            </div>
+            <Field name="universityName" label="University name" error={fieldError("universityName")}>
+              <Input
+                id="universityName"
+                name="universityName"
+                defaultValue={profile.universityName ?? ""}
+                maxLength={120}
+              />
+            </Field>
+            <Field
+              name="universityDepartment"
+              label="Department"
+              error={fieldError("universityDepartment")}
+            >
+              <Input
+                id="universityDepartment"
+                name="universityDepartment"
+                defaultValue={profile.universityDepartment ?? ""}
+                maxLength={120}
+              />
+            </Field>
+            <Field
+              name="universitySession"
+              label="Session"
+              error={fieldError("universitySession")}
+              hint="e.g. 2020-21"
+            >
+              <Input
+                id="universitySession"
+                name="universitySession"
+                defaultValue={profile.universitySession ?? ""}
+                maxLength={40}
+                placeholder="2020-21"
+              />
+            </Field>
+            <Field
+              name="degree"
+              label="Highest degree"
+              error={fieldError("degree")}
+              hint="e.g. BSc in Civil Engineering."
+              className="sm:col-span-2"
+            >
+              <Input id="degree" name="degree" defaultValue={profile.degree ?? ""} maxLength={80} />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Contact & social</CardTitle>
+          <CardDescription>
+            WhatsApp number and Facebook profile are required before you can use the directory.
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field
-            name="graduationYear"
-            label="SSC passing year"
-            error={fieldError("graduationYear")}
+            name="whatsappPhone"
+            label="WhatsApp number"
+            error={fieldError("whatsappPhone")}
+            hint="Include country code, e.g. +8801XXXXXXXXX"
+            required
+            className="sm:col-span-2"
           >
             <Input
-              id="graduationYear"
-              name="graduationYear"
-              type="number"
-              min={EARLIEST_PASSING_YEAR}
-              max={LATEST_PASSING_YEAR}
-              defaultValue={profile.graduationYear ?? ""}
+              id="whatsappPhone"
+              name="whatsappPhone"
+              type="tel"
+              defaultValue={profile.whatsappPhone ?? ""}
+              required
+              placeholder="+8801XXXXXXXXX"
             />
           </Field>
 
-          <Field name="departmentId" label="Group / department" error={fieldError("departmentId")}>
-            <select
-              id="departmentId"
-              name="departmentId"
-              defaultValue={profile.departmentId ?? ""}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Not specified</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
           <Field
-            name="degree"
-            label="Highest degree"
-            error={fieldError("degree")}
-            hint="Later qualifications, e.g. BSc in Civil Engineering."
+            name="facebookUrl"
+            label="Facebook profile"
+            error={fieldError("facebookUrl")}
+            required
             className="sm:col-span-2"
           >
-            <Input id="degree" name="degree" defaultValue={profile.degree ?? ""} maxLength={80} />
+            <Input
+              id="facebookUrl"
+              name="facebookUrl"
+              type="url"
+              defaultValue={profile.facebookUrl ?? ""}
+              required
+              placeholder="https://www.facebook.com/..."
+            />
+          </Field>
+
+          <Field name="linkedInUrl" label="LinkedIn" error={fieldError("linkedInUrl")}>
+            <Input
+              id="linkedInUrl"
+              name="linkedInUrl"
+              type="url"
+              defaultValue={profile.linkedInUrl ?? ""}
+              placeholder="https://www.linkedin.com/in/..."
+            />
+          </Field>
+
+          <Field name="websiteUrl" label="Website" error={fieldError("websiteUrl")}>
+            <Input
+              id="websiteUrl"
+              name="websiteUrl"
+              type="url"
+              defaultValue={profile.websiteUrl ?? ""}
+              placeholder="https://..."
+            />
           </Field>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Work and links</CardTitle>
+          <CardTitle className="text-base">Work and location</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field name="company" label="Employer" error={fieldError("company")}>
@@ -222,26 +397,6 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
                 </option>
               ))}
             </select>
-          </Field>
-
-          <Field name="linkedInUrl" label="LinkedIn" error={fieldError("linkedInUrl")}>
-            <Input
-              id="linkedInUrl"
-              name="linkedInUrl"
-              type="url"
-              defaultValue={profile.linkedInUrl ?? ""}
-              placeholder="https://www.linkedin.com/in/..."
-            />
-          </Field>
-
-          <Field name="websiteUrl" label="Website" error={fieldError("websiteUrl")}>
-            <Input
-              id="websiteUrl"
-              name="websiteUrl"
-              type="url"
-              defaultValue={profile.websiteUrl ?? ""}
-              placeholder="https://..."
-            />
           </Field>
         </CardContent>
       </Card>

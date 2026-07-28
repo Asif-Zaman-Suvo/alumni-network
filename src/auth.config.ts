@@ -42,6 +42,8 @@ export const authConfig = {
       if (token.sub) session.user.id = token.sub;
       session.user.role = token.role;
       session.user.status = token.status;
+      session.user.isEmailVerified = Boolean(token.isEmailVerified);
+      session.user.profileComplete = Boolean(token.profileComplete);
       return session;
     },
   },

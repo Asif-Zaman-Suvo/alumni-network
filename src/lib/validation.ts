@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EDUCATION_GROUPS } from "@/lib/education-groups";
 
 export const EARLIEST_PASSING_YEAR = 1950;
 export const LATEST_PASSING_YEAR = new Date().getFullYear();
@@ -109,11 +110,38 @@ const optionalUrl = z
     { message: "Enter a full URL starting with https://" },
   );
 
+const requiredUrl = z
+  .string()
+  .trim()
+  .min(1, "This link is required")
+  .refine(
+    (value) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "https:" || parsed.protocol === "http:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "Enter a full URL starting with https://" },
+  );
+
+/** BD / international WhatsApp numbers: optional +, digits, spaces, dashes. */
+const whatsappPhone = z
+  .string()
+  .trim()
+  .min(8, "Enter a valid WhatsApp number")
+  .max(20, "Phone number is too long")
+  .regex(/^\+?[\d\s\-()]{8,20}$/, "Use digits, spaces, or +country code");
+
 export const profileSchema = z.object({
   displayName: fullName,
   headline: optionalText(120),
   bio: optionalText(1000),
   graduationYear: z
+    .union([passingYear, z.literal("").transform(() => null), z.null()])
+    .optional(),
+  hscPassingYear: z
     .union([passingYear, z.literal("").transform(() => null), z.null()])
     .optional(),
   degree: optionalText(80),
@@ -125,6 +153,8 @@ export const profileSchema = z.object({
     .optional(),
   company: optionalText(120),
   position: optionalText(120),
+  whatsappPhone,
+  facebookUrl: requiredUrl,
   linkedInUrl: optionalUrl,
   websiteUrl: optionalUrl,
   city: optionalText(80),
@@ -136,6 +166,21 @@ export const profileSchema = z.object({
     .nullable()
     .optional()
     .or(z.literal("").transform(() => null)),
+  collegeName: optionalText(120),
+  collegeDepartment: z
+    .string()
+    .trim()
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional()
+    .refine(
+      (value) => value == null || (EDUCATION_GROUPS as readonly string[]).includes(value),
+      { message: "Choose Science, Business Studies, or Humanities" },
+    ),
+  collegeSession: optionalText(40),
+  universityName: optionalText(120),
+  universityDepartment: optionalText(120),
+  universitySession: optionalText(40),
   visibility: z.enum(["PUBLIC", "MEMBERS_ONLY", "PRIVATE"]),
   showEmail: z.coerce.boolean(),
   showEmployer: z.coerce.boolean(),

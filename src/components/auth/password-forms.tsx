@@ -6,6 +6,7 @@ import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export function ForgotPasswordForm() {
   const { formRef, formAction, pending, formError, fieldError, result } = useActionForm(
@@ -70,10 +71,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
         hint="At least 10 characters, including a number."
         required
       >
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="new-password"
           required
         />
@@ -85,10 +85,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
         error={fieldError("confirmPassword")}
         required
       >
-        <Input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           required
         />

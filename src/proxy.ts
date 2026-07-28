@@ -21,6 +21,7 @@ const PUBLIC_PATHS = new Set([
   "/register",
   "/forgot-password",
   "/reset-password",
+  "/verify-email",
 ]);
 
 const PUBLIC_PREFIXES = ["/profile/"];
@@ -44,6 +45,7 @@ function isAllowedForStatus(pathname: string, status: UserStatus | undefined): b
     case "REJECTED":
       return pathname === "/verification-status";
     case "VERIFIED":
+      // Incomplete profiles may still reach settings to finish required fields.
       if (pathname === "/onboarding" || pathname === "/verification-status") return false;
       return true;
     default:
@@ -65,7 +67,8 @@ export const proxy = auth((request) => {
     return NextResponse.redirect(target);
   }
 
-  const { status, role } = session.user;
+  const { status, role, profileComplete } = session.user;
+  const isStaff = role === "ADMIN" || role === "MODERATOR";
   const isAdminArea = pathname.startsWith("/admin");
 
   // Always allow auth screens through. Pages call getViewer() and redirect when the
@@ -76,11 +79,17 @@ export const proxy = auth((request) => {
   }
 
   if (!isAllowedForStatus(pathname, status)) {
-    return redirect(homeForStatus(status), nextUrl);
+    return redirect(
+      homeForStatus(status, { profileComplete, isStaff }),
+      nextUrl,
+    );
   }
 
-  if (status === "VERIFIED" && isAdminArea && role !== "ADMIN" && role !== "MODERATOR") {
-    return redirect("/directory", nextUrl);
+  if (status === "VERIFIED" && isAdminArea && !isStaff) {
+    return redirect(
+      homeForStatus(status, { profileComplete, isStaff }),
+      nextUrl,
+    );
   }
 
   return NextResponse.next();

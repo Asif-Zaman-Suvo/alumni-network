@@ -5,6 +5,7 @@ import { ExternalLinkIcon } from "lucide-react";
 import { DeleteAccountCard } from "@/components/profile/delete-account-card";
 import { ExportDataCard } from "@/components/profile/export-data-card";
 import { ProfileForm } from "@/components/profile/profile-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getOwnProfile, listDepartments } from "@/lib/dal/profiles";
 import { requireVerifiedViewer } from "@/lib/dal/session";
@@ -14,11 +15,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function ProfileSettingsPage() {
+export default async function ProfileSettingsPage(props: {
+  searchParams: Promise<{ complete?: string }>;
+}) {
+  const searchParams = await props.searchParams;
   const viewer = await requireVerifiedViewer();
   const [profile, departments] = await Promise.all([getOwnProfile(), listDepartments()]);
 
   if (!profile) notFound();
+
+  const needsComplete = searchParams.complete === "1" || !viewer.profileComplete;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:px-6">
@@ -29,13 +35,25 @@ export default async function ProfileSettingsPage() {
             This is what batchmates see when they find you in the directory.
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href={`/profile/${profile.slug}`}>
-            View public profile
-            <ExternalLinkIcon />
-          </Link>
-        </Button>
+        {viewer.profileComplete ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/profile/${profile.slug}`}>
+              View public profile
+              <ExternalLinkIcon />
+            </Link>
+          </Button>
+        ) : null}
       </header>
+
+      {needsComplete ? (
+        <Alert variant="warning">
+          <AlertTitle>Complete your profile to unlock the directory</AlertTitle>
+          <AlertDescription>
+            After approval you must add your WhatsApp number and Facebook profile link. College
+            and university details help batchmates find you.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <ProfileForm profile={profile} departments={departments} email={viewer.email} />
 

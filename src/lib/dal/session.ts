@@ -12,6 +12,8 @@ export type Viewer = {
   status: UserStatus;
   isVerified: boolean;
   isStaff: boolean;
+  emailVerified: boolean;
+  profileComplete: boolean;
 };
 
 /**
@@ -35,6 +37,8 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     status: user.status,
     isVerified: user.status === "VERIFIED",
     isStaff: user.role === "ADMIN" || user.role === "MODERATOR",
+    emailVerified: Boolean(user.isEmailVerified),
+    profileComplete: Boolean(user.profileComplete),
   };
 });
 
@@ -49,6 +53,18 @@ export async function requireVerifiedViewer(): Promise<Viewer> {
   const viewer = await requireViewer();
   if (!viewer.isVerified) {
     redirect(viewer.status === "UNVERIFIED" ? "/onboarding" : "/verification-status");
+  }
+  return viewer;
+}
+
+/**
+ * Directory + member data require an approved account AND required contact fields
+ * (WhatsApp + Facebook). Staff bypass the profile gate.
+ */
+export async function requireDirectoryAccess(): Promise<Viewer> {
+  const viewer = await requireVerifiedViewer();
+  if (!viewer.isStaff && !viewer.profileComplete) {
+    redirect("/settings/profile?complete=1");
   }
   return viewer;
 }
