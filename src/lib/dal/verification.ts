@@ -37,21 +37,29 @@ function mask(value: string): string {
 export async function getOwnVerificationState(): Promise<OwnVerificationState> {
   const viewer = await requireViewer();
 
-  const requests = await prisma.verificationRequest.findMany({
-    where: { userId: viewer.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      createdAt: true,
-      passingYear: true,
-      fullNameOnCert: true,
-      sscRoll: true,
-      documentPath: true,
-      status: true,
-      reviewNote: true,
-      reviewedAt: true,
-    },
-  });
+  const [account, requests] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: viewer.id },
+      select: { status: true },
+    }),
+    prisma.verificationRequest.findMany({
+      where: { userId: viewer.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        passingYear: true,
+        fullNameOnCert: true,
+        sscRoll: true,
+        documentPath: true,
+        status: true,
+        reviewNote: true,
+        reviewedAt: true,
+      },
+    }),
+  ]);
+
+  const status = account?.status ?? viewer.status;
 
   const attempts: OwnVerificationRequest[] = requests.map((request) => ({
     id: request.id,
@@ -68,12 +76,12 @@ export async function getOwnVerificationState(): Promise<OwnVerificationState> {
   const attemptsUsed = attempts.length;
 
   return {
-    status: viewer.status,
+    status,
     attempts,
     attemptsUsed,
     attemptsRemaining: Math.max(0, MAX_SUBMISSION_ATTEMPTS - attemptsUsed),
     canResubmit:
-      (viewer.status === "REJECTED" || viewer.status === "UNVERIFIED") &&
+      (status === "REJECTED" || status === "UNVERIFIED") &&
       attemptsUsed < MAX_SUBMISSION_ATTEMPTS,
     latest: attempts[0] ?? null,
   };
