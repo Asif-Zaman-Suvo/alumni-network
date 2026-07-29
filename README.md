@@ -2,134 +2,103 @@
 
 Verified alumni networking platform for **Shamsul Hoque Khan School & College**.
 
-Graduates request access with SSC roll and registration details. An administrator manually approves every account before the member directory unlocks. Profiles support privacy controls; SSC identifiers never appear in the public or member-facing directory.
+Identity is SSC-based (roll, registration, passing year), not email. An administrator must approve every new alumni claim before the directory unlocks. Google and email/password can both sign people in, but a second account cannot claim an SSC identity that is already verified or pending.
+
+---
 
 ## Features
 
+<<<<<<< Updated upstream
 - **SSC-gated onboarding** — roll, registration, passing year, optional certificate upload
 - **Admin review queue** — approve / reject with notes, bulk approve, audit log
 - **Searchable directory** — name, employer, department, batch year, country (Postgres FTS + trigram)
 - **Privacy-aware profiles** — `PUBLIC` / `MEMBERS_ONLY` / `PRIVATE`, optional email & employer visibility
 - **Auth** — email/password (Auth.js) + optional Google OAuth (linked via Auth.js `Account` + SSC identity, never by email alone)
 - **Account settings** — edit profile, avatar, data export, account close
+=======
+- **SSC-gated access** — alumni prove identity with roll, registration, and passing year; optional certificate upload
+- **Admin review queue** — approve or reject with notes, bulk actions, audit history
+- **One alumni / one account** — VERIFIED and PENDING SSC identities are unique; Google onboarding that matches an existing alum is blocked (masked email + sign in to the existing account)
+- **Auth** — email/password and Google OAuth; verified users can link Google from settings without re-entering SSC
+- **Searchable directory** — name, employer, department, batch year, country (Postgres full-text + trigram)
+- **Privacy-aware profiles** — `PUBLIC` / `MEMBERS_ONLY` / `PRIVATE`, with optional email and employer visibility
+- **Account settings** — profile and avatar editing, linked sign-in methods, data export, account close
+- **SSC privacy** — roll and registration numbers are admin-only; never shown in the directory or on public profiles
+>>>>>>> Stashed changes
 
-## Stack
+---
 
-| Layer | Tech |
+## Tech stack
+
+| Layer | Choice |
 |---|---|
 | App | Next.js 16 (App Router), React 19, TypeScript |
-| Auth | Auth.js v5 (JWT sessions) |
+| Auth | Auth.js v5 (JWT sessions, Prisma adapter) |
 | Data | Prisma 6 → PostgreSQL (Supabase) |
-| UI | Tailwind CSS 4, shadcn/ui |
-| Files | Supabase Storage (certificates, avatars) |
-| Email | Resend (optional; logs to console without a key) |
+| UI | Tailwind CSS 4, shadcn/ui, Motion |
+| Files | Supabase Storage (private certificates, avatars) |
+| Email | Resend (optional; falls back to console without a key) |
+| Validation | Zod |
+| Runtime | Node.js 20.9+ |
 
-## Prerequisites
-
-- Node.js **20.9+**
-- A Supabase project (Postgres + Storage), or any Postgres 15+
-- Optional: Google OAuth client, Resend API key
-
-## Setup
-
-```bash
-cp .env.example .env
-# Fill DATABASE_URL, DIRECT_URL, AUTH_SECRET, Supabase keys (see below)
-
-npm install
-npx prisma migrate deploy
-npm run db:seed
-npm run dev
-```
-
-App: [http://localhost:3000](http://localhost:3000)
-
-### Environment
-
-Copy from `.env.example`. Important variables:
-
-| Variable | Notes |
-|---|---|
-| `DATABASE_URL` | **Pooled** Supabase URL (`…pooler…:6543`, `pgbouncer=true`). Prefer session-mode pooler host for both URLs if the direct `db.*.supabase.co` host is IPv6-only and unreachable. |
-| `DIRECT_URL` | Session / migrate URL (`…pooler…:5432` or direct `:5432`) |
-| `AUTH_SECRET` | `openssl rand -base64 32` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only; never expose to the client |
-| `NEXT_PUBLIC_SCHOOL_NAME` | Brand string in the header |
-| `NEXT_PUBLIC_APP_URL` | Canonical app origin (e.g. `http://localhost:3000`) |
-
-`connection_limit=1` on `DATABASE_URL` is correct for many serverless isolates. For a single `next dev` process you may raise it (e.g. `5`) so parallel queries can overlap.
-
-### Supabase Storage buckets
-
-| Bucket | Public | Purpose |
-|---|---|---|
-| `verification-documents` | **No** | SSC certificate uploads (admin reads via signed URL) |
-| `avatars` | Yes (or signed) | Profile photos |
-
-### Seed accounts
-
-After `npm run db:seed`:
-
-| Email | Password | Role / status |
-|---|---|---|
-| `admin@school.test` | `password123` | ADMIN / VERIFIED |
-| `alumni0@example.test` | `password123` | ALUMNI / VERIFIED |
-| `pending0@example.test` | `password123` | PENDING |
-| `rejected0@example.test` | `password123` | REJECTED |
-
-The seed also creates hundreds of verified profiles and a batch of pending verification requests.
-
-## Scripts
-
-| Command | Purpose |
-|---|---|
-| `npm run dev` | Local development (Turbopack) |
-| `npm run build` | Prisma generate + production build |
-| `npm run start` | Run production server |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint |
-| `npm run db:migrate` | Create/apply migrations (dev) |
-| `npm run db:deploy` | Apply migrations (prod) |
-| `npm run db:seed` | Departments + synthetic alumni |
-| `npm run db:studio` | Prisma Studio |
-| `npm run test:unit` | Privacy predicate unit tests |
-| `npm run test:e2e` | Playwright (needs running DB + seed) |
+---
 
 ## Architecture
 
 ```
 Browser
   → Next.js App Router (RSC + Server Actions)
-  → src/proxy.ts          routing gate (JWT decode only)
-  → src/lib/dal/*         real security boundary
+  → src/proxy.ts                 route convenience gate (JWT decode only)
+  → src/lib/dal/*                real authorization boundary
   → Prisma → Supabase Postgres / Storage
 ```
 
-- **Verification flow:** `UNVERIFIED` → submit SSC → `PENDING` → admin `VERIFIED` | `REJECTED`
-- **Proxy** (`src/proxy.ts`): Next 16 request interception; convenience only — not the security boundary
-- **DAL:** profile reads via `src/lib/dal/profiles.ts`; SSC fields only via `src/lib/dal/admin.ts`
-- **Search:** generated `tsvector` + `pg_trgm` (see `prisma/migrations/0_init/migration.sql`)
-- **Integrity:** partial unique index so the same SSC identity cannot be approved on two accounts
+**Verification lifecycle**
 
-## Deploy (Vercel)
+`UNVERIFIED` → submit SSC → `PENDING` → admin → `VERIFIED` | `REJECTED` (resubmit allowed)
 
-1. Set every variable from `.env.example` in the Vercel project.
-2. Build runs Prisma generate; ensure migrations deploy (`db:deploy` / project build command as configured).
-3. Point `NEXT_PUBLIC_APP_URL` (and `AUTH_URL` if needed) at the production domain.
-4. Create the Storage buckets and set `SUPABASE_SERVICE_ROLE_KEY` as a server-only secret.
+- Email/password signup collects SSC at registration and goes straight to the admin queue.
+- Google first login creates an Auth.js stub (`UNVERIFIED`), then `/onboarding` collects SSC. Matching a VERIFIED alum deletes the stub and sends the user to login; a new claim stays `PENDING`.
 
-## Manual checklist
+**Security boundaries**
 
-- [ ] Register with SSC details → lands on verification status
-- [ ] Pending user cannot open `/directory`
-- [ ] Admin approves → user reaches directory
-- [ ] Admin rejects with note → user can resubmit
-- [ ] Profile privacy (`PUBLIC` / `MEMBERS_ONLY` / `PRIVATE`) respected
-- [ ] Data export and account close work from settings
-- [ ] Mobile layout usable at phone width
+- `src/proxy.ts` — request routing only; not the security boundary
+- `src/lib/dal/*` — session-aware reads/writes; directory and profile payloads never include SSC fields
+- Admin SSC access only through admin DAL paths
 
-## License
+**Data integrity**
 
-Private / unpublished unless otherwise stated.
+- Partial unique indexes: one `VERIFIED` and one `PENDING` row per `(sscRoll, sscRegistration, passingYear)`
+- Profile search via generated `tsvector` + `pg_trgm` on display name
+- Soft-delete on users (`deletedAt`); GDPR-style export and account close from settings
+
+**Auth model**
+
+- Auth.js `Account` = “this Google login works”
+- `VerificationRequest` (VERIFIED SSC) = “this is the same alum”
+- No auto-link by matching OAuth email alone
+
+---
+
+## Environment
+
+| Variable | Role |
+|---|---|
+| `DATABASE_URL` | Pooled Postgres URL for the app runtime (typically Supabase pooler) |
+| `DIRECT_URL` | Direct / session URL for Prisma Migrate |
+| `AUTH_SECRET` | Auth.js signing secret |
+| `AUTH_URL` | Auth callback origin (production) |
+| `NEXT_PUBLIC_APP_URL` | Canonical app origin |
+| `NEXT_PUBLIC_SCHOOL_NAME` | Brand string in the UI |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Storage and privileged Supabase access |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Optional Google OAuth |
+| `RESEND_API_KEY` / `EMAIL_FROM` | Optional transactional email |
+
+**Storage buckets**
+
+| Bucket | Visibility | Purpose |
+|---|---|---|
+| `verification-documents` | Private | SSC certificates (admin via signed URL) |
+| `avatars` | Public or signed | Profile photos |
