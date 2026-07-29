@@ -30,6 +30,8 @@ const serverSchema = z.object({
   ),
   AUTH_GOOGLE_ID: optionalSecret,
   AUTH_GOOGLE_SECRET: optionalSecret,
+  AUTH_FACEBOOK_ID: optionalSecret,
+  AUTH_FACEBOOK_SECRET: optionalSecret,
 
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_CERTIFICATE_BUCKET: z.string().min(1).default("verification-documents"),

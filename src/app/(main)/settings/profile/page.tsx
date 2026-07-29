@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLinkIcon } from "lucide-react";
+import { isGoogleEnabled } from "@/auth.config";
 import { DeleteAccountCard } from "@/components/profile/delete-account-card";
 import { ExportDataCard } from "@/components/profile/export-data-card";
+import { LinkedAccountsCard } from "@/components/profile/linked-accounts-card";
 import { ProfileForm } from "@/components/profile/profile-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getOwnProfile, listDepartments } from "@/lib/dal/profiles";
 import { requireVerifiedViewer } from "@/lib/dal/session";
+import { listLinkedProviders } from "@/lib/oauth-link";
 
 export const metadata: Metadata = {
   title: "Edit profile",
@@ -16,15 +19,20 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfileSettingsPage(props: {
-  searchParams: Promise<{ complete?: string }>;
+  searchParams: Promise<{ complete?: string; linked?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const viewer = await requireVerifiedViewer();
-  const [profile, departments] = await Promise.all([getOwnProfile(), listDepartments()]);
+  const [profile, departments, linkedAccounts] = await Promise.all([
+    getOwnProfile(),
+    listDepartments(),
+    listLinkedProviders(viewer.id),
+  ]);
 
   if (!profile) notFound();
 
   const needsComplete = searchParams.complete === "1" || !viewer.profileComplete;
+  const justLinked = searchParams.linked === "1";
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:px-6">
@@ -45,6 +53,15 @@ export default async function ProfileSettingsPage(props: {
         ) : null}
       </header>
 
+      {justLinked ? (
+        <Alert variant="success">
+          <AlertTitle>Social login linked</AlertTitle>
+          <AlertDescription>
+            You can sign in with that provider next time. Your alumni identity is unchanged.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {needsComplete ? (
         <Alert variant="warning">
           <AlertTitle>Complete your profile to unlock the directory</AlertTitle>
@@ -56,6 +73,11 @@ export default async function ProfileSettingsPage(props: {
       ) : null}
 
       <ProfileForm profile={profile} departments={departments} email={viewer.email} />
+
+      <LinkedAccountsCard
+        linkedProviders={linkedAccounts.map((account) => account.provider)}
+        googleEnabled={isGoogleEnabled}
+      />
 
       <ExportDataCard />
       <DeleteAccountCard />

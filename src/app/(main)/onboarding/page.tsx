@@ -13,8 +13,12 @@ export const metadata: Metadata = {
 };
 
 /**
- * Where Google sign-ups land. OAuth cannot collect SSC details during the redirect, so this
- * is the step that turns an UNVERIFIED account into a reviewable request.
+ * Where Google first-time sign-ins land. OAuth cannot collect SSC during the
+ * provider redirect. Email+password signup already collected SSC on /register and never
+ * visits this page.
+ *
+ * Submitting SSC here either links this login to an already-VERIFIED alumni account, or
+ * opens a PENDING admin review for a new claim.
  */
 export default async function OnboardingPage() {
   const viewer = await requireViewer();
@@ -31,8 +35,9 @@ export default async function OnboardingPage() {
         <CardHeader>
           <CardTitle className="text-xl">One more step</CardTitle>
           <CardDescription>
-            Your account is created. Now confirm that you are a former student so an
-            administrator can activate it.
+            Confirm you studied here. If you already have an approved alumni account, these
+            numbers will link this social login to it. Otherwise an administrator will review
+            your request.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

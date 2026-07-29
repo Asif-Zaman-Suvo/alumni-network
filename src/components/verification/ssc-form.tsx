@@ -19,7 +19,6 @@ export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
   const [fileName, setFileName] = React.useState<string | null>(null);
   const { formRef, formAction, pending, formError, fieldError } = useActionForm(
     submitVerificationAction,
-    { redirectTo: "/verification-status" },
   );
 
   return (

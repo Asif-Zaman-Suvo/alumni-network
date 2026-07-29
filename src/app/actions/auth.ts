@@ -52,6 +52,29 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
     });
   }
 
+  // Alumni identity is SSC roll + registration, not email. Block a second claim when the
+  // identity is already verified or already waiting in the admin queue under another user.
+  const sscTaken = await prisma.verificationRequest.findFirst({
+    where: {
+      sscRoll,
+      sscRegistration,
+      status: { in: ["VERIFIED", "PENDING"] },
+      user: { deletedAt: null },
+    },
+    select: { id: true, status: true },
+  });
+  if (sscTaken) {
+    return actionError(
+      sscTaken.status === "VERIFIED"
+        ? "An alumni account with these SSC details already exists. Sign in with that account, or link Google from settings after you are verified."
+        : "These SSC details are already under review for another account. Contact the alumni office if this is a mistake.",
+      {
+        sscRoll: ["These SSC details are already registered."],
+        sscRegistration: ["These SSC details are already registered."],
+      },
+    );
+  }
+
   const passwordHash = await hash(password, 12);
   const slug = await uniqueSlug(fullName);
 

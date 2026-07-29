@@ -10,7 +10,7 @@ Graduates request access with SSC roll and registration details. An administrato
 - **Admin review queue** — approve / reject with notes, bulk approve, audit log
 - **Searchable directory** — name, employer, department, batch year, country (Postgres FTS + trigram)
 - **Privacy-aware profiles** — `PUBLIC` / `MEMBERS_ONLY` / `PRIVATE`, optional email & employer visibility
-- **Auth** — email/password (Auth.js) + optional Google OAuth
+- **Auth** — email/password (Auth.js) + optional Google OAuth (linked via Auth.js `Account` + SSC identity, never by email alone)
 - **Account settings** — edit profile, avatar, data export, account close
 
 ## Stack

@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isGoogleEnabled } from "@/auth.config";
-import { GoogleButton } from "@/components/auth/google-button";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { LoginForm } from "@/components/auth/login-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { homeForStatus } from "@/lib/auth-routes";
 import { getViewer } from "@/lib/dal/session";
@@ -12,6 +13,35 @@ export const metadata: Metadata = {
   title: "Sign in",
   robots: { index: false, follow: false },
 };
+
+function oauthErrorCopy(error: string | undefined): { title: string; body: string } | null {
+  switch (error) {
+    case "OAuthAccountNotLinked":
+      return {
+        title: "Email already registered",
+        body: "An account with this email already exists. Sign in with your password, then link Google from profile settings — or try Continue with Google again after restarting the app.",
+      };
+    case "OAuthCallback":
+    case "Callback":
+      return {
+        title: "Sign-in interrupted",
+        body: "Google did not finish signing you in. Try again.",
+      };
+    case "AccessDenied":
+      return {
+        title: "Access denied",
+        body: "Google did not grant access. Try again or use email and password.",
+      };
+    case undefined:
+    case "":
+      return null;
+    default:
+      return {
+        title: "Could not sign in",
+        body: "Something went wrong with social sign-in. Try email and password, or try again.",
+      };
+  }
+}
 
 export default async function LoginPage(props: {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
@@ -34,6 +64,9 @@ export default async function LoginPage(props: {
     redirect(dest);
   }
 
+  const googleEnabled = isGoogleEnabled;
+  const oauthError = oauthErrorCopy(searchParams.error);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -43,9 +76,16 @@ export default async function LoginPage(props: {
         </p>
       </div>
 
+      {oauthError ? (
+        <Alert variant="destructive">
+          <AlertTitle>{oauthError.title}</AlertTitle>
+          <AlertDescription>{oauthError.body}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <LoginForm callbackUrl={searchParams.callbackUrl} />
 
-      {isGoogleEnabled ? (
+      {googleEnabled ? (
         <>
           <div className="relative">
             <Separator />
@@ -53,7 +93,7 @@ export default async function LoginPage(props: {
               or
             </span>
           </div>
-          <GoogleButton callbackUrl={searchParams.callbackUrl ?? "/onboarding"} />
+          <OAuthButtons callbackUrl={searchParams.callbackUrl ?? "/onboarding"} />
         </>
       ) : null}
 
