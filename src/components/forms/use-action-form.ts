@@ -39,14 +39,31 @@ export function useActionForm<T>(action: ServerAction<T>, options: Options = {})
       }
       if (resetOnSuccess) formRef.current?.reset();
       onSuccess?.();
-      if (redirectTo) {
-        router.push(redirectTo);
+
+      const dataRedirect =
+        state.data &&
+        typeof state.data === "object" &&
+        "redirectTo" in state.data &&
+        typeof (state.data as { redirectTo?: unknown }).redirectTo === "string"
+          ? (state.data as { redirectTo: string }).redirectTo
+          : undefined;
+
+      const next = dataRedirect ?? redirectTo;
+      if (next) {
+        router.push(next);
         router.refresh();
       } else {
         router.refresh();
       }
     } else if (!state.fieldErrors) {
-      toast({ title: state.error, variant: "error" });
+      // Structured client-handled errors (e.g. blocked existing account) render inline.
+      const clientHandled =
+        state.data &&
+        typeof state.data === "object" &&
+        "existingAccount" in state.data;
+      if (!clientHandled) {
+        toast({ title: state.error, variant: "error" });
+      }
     }
   }, [state, redirectTo, router, successToast, onSuccess, resetOnSuccess]);
 

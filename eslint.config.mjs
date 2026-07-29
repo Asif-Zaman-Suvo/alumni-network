@@ -42,6 +42,8 @@ const config = [
       "src/lib/dal/**",
       "src/lib/prisma.ts",
       "src/lib/rate-limit.ts",
+      "src/lib/oauth-link.ts",
+      "src/lib/auth-adapter.ts",
       "src/app/actions/**",
       "src/auth.ts",
       "prisma/**",

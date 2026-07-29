@@ -1,32 +1,60 @@
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import { compare } from "bcryptjs";
 import NextAuth from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "@/auth.config";
+import { createAlumniAuthAdapter } from "@/lib/auth-adapter";
+import {
+  consumeOAuthLinkIntent,
+  deleteOAuthStubUser,
+  mergeOAuthStubIntoUser,
+  OAuthLinkConflictError,
+  setOAuthLinkError,
+} from "@/lib/oauth-link";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validation";
 
 /**
  * Full Auth.js instance: adapter, credentials verification and the DB-backed JWT callback.
- * Server components, route handlers and Server Actions import from here.
+ *
+ * OAuth return visits resolve via `Account(provider, providerAccountId)`.
+ * First-time OAuth creates a stub User; SSC onboarding blocks if that SSC is already
+ * VERIFIED (no auto-merge). Settings "Link provider" sets a short-lived cookie so the
+ * stub created by Auth.js is merged into the already-verified session user instead.
  */
 
-/**
- * Role/status live in the JWT. We deliberately do NOT re-query Postgres on every RSC
- * navigation: each remote round-trip is ~1–3s from this deployment region, and Auth.js
- * often fails to persist `refreshedAt` from Server Components — which made the old 5-minute
- * refresh fire on every request (≈3s auth tax on top of page queries).
- *
- * Refresh sources:
- *   - Sign-in (`user` present): claims copied from authorize() — zero extra DB hit
- *   - `trigger === "update"`: explicit session.update()
- *   - Hourly safety net: picks up role/suspension changes without a re-login
- */
 const TOKEN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+
+const userClaimsSelect = {
+  role: true,
+  status: true,
+  emailVerified: true,
+  profileComplete: true,
+  deletedAt: true,
+  profile: { select: { displayName: true, avatarUrl: true } },
+} as const;
+
+async function applyUserClaims(token: JWT, userId: string): Promise<JWT | null> {
+  const fresh = await prisma.user.findUnique({
+    where: { id: userId },
+    select: userClaimsSelect,
+  });
+  if (!fresh || fresh.deletedAt) return null;
+
+  token.sub = userId;
+  token.role = fresh.role;
+  token.status = fresh.status;
+  token.isEmailVerified = Boolean(fresh.emailVerified);
+  token.profileComplete = fresh.profileComplete;
+  token.name = fresh.profile?.displayName ?? token.name;
+  token.picture = fresh.profile?.avatarUrl ?? token.picture;
+  token.refreshedAt = Date.now();
+  return token;
+}
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
+  adapter: createAlumniAuthAdapter(),
   providers: [
     ...authConfig.providers,
     Credentials({
@@ -53,8 +81,6 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           },
         });
 
-        // Users created through Google have no passwordHash; fall through to the same
-        // generic failure so the response never reveals which accounts exist.
         if (!user || !user.passwordHash || user.deletedAt) return null;
 
         const valid = await compare(parsed.data.password, user.passwordHash);
@@ -75,7 +101,17 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, trigger, session }) {
+      if (trigger === "update" && session && typeof session === "object") {
+        const switchTo =
+          "switchToUserId" in session && typeof session.switchToUserId === "string"
+            ? session.switchToUserId
+            : null;
+        if (switchTo) {
+          return applyUserClaims(token, switchTo);
+        }
+      }
+
       if (user?.id) {
         token.sub = user.id;
         if (user.role) token.role = user.role;
@@ -87,26 +123,41 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         );
         token.profileComplete = Boolean(user.profileComplete);
 
-        // OAuth first login may omit role/status on the user object — one DB read then.
-        if (!token.role || !token.status) {
-          const fresh = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: {
-              role: true,
-              status: true,
-              emailVerified: true,
-              profileComplete: true,
-              deletedAt: true,
-              profile: { select: { displayName: true, avatarUrl: true } },
-            },
+        const linkTargetId = await consumeOAuthLinkIntent();
+        if (linkTargetId && linkTargetId !== user.id) {
+          const target = await prisma.user.findUnique({
+            where: { id: linkTargetId },
+            select: { id: true, status: true, deletedAt: true },
           });
-          if (!fresh || fresh.deletedAt) return null;
-          token.role = fresh.role;
-          token.status = fresh.status;
-          token.isEmailVerified = Boolean(fresh.emailVerified);
-          token.profileComplete = fresh.profileComplete;
-          token.name = fresh.profile?.displayName ?? token.name;
-          token.picture = fresh.profile?.avatarUrl ?? token.picture;
+
+          if (target && !target.deletedAt && target.status === "VERIFIED") {
+            try {
+              await mergeOAuthStubIntoUser(user.id, linkTargetId);
+              return applyUserClaims(token, linkTargetId);
+            } catch (error) {
+              if (!(error instanceof OAuthLinkConflictError)) throw error;
+
+              await setOAuthLinkError(
+                "This Google account is already linked to another alumni profile. Unlink it there first, or use a different Google account.",
+              );
+
+              // Restore the verified session that started Link Google. Drop an OAuth stub
+              // created for this attempt so it does not linger as a second User.
+              const incoming = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { status: true },
+              });
+              if (incoming?.status === "UNVERIFIED") {
+                await deleteOAuthStubUser(user.id);
+              }
+
+              return applyUserClaims(token, linkTargetId);
+            }
+          }
+        }
+
+        if (!token.role || !token.status) {
+          return applyUserClaims(token, user.id);
         }
 
         token.refreshedAt = Date.now();
@@ -115,40 +166,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
       const stale = Date.now() - (token.refreshedAt ?? 0) > TOKEN_REFRESH_INTERVAL_MS;
       if ((trigger === "update" || stale) && token.sub) {
-        const fresh = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: {
-            role: true,
-            status: true,
-            emailVerified: true,
-            profileComplete: true,
-            deletedAt: true,
-            profile: { select: { displayName: true, avatarUrl: true } },
-          },
-        });
-
-        // Deleting an account invalidates the session on the next refresh window.
-        if (!fresh || fresh.deletedAt) return null;
-
-        token.role = fresh.role;
-        token.status = fresh.status;
-        token.isEmailVerified = Boolean(fresh.emailVerified);
-        token.profileComplete = fresh.profileComplete;
-        token.name = fresh.profile?.displayName ?? token.name;
-        token.picture = fresh.profile?.avatarUrl ?? token.picture;
-        token.refreshedAt = Date.now();
+        return applyUserClaims(token, token.sub);
       }
 
       return token;
     },
   },
   events: {
-    /**
-     * A brand new Google user has no SSC details yet, so they land in UNVERIFIED and the
-     * proxy sends them to /onboarding. The adapter creates the row without a status, so
-     * the default from the schema applies; nothing to do here beyond recording the email
-     * as verified, which Google has already proven.
-     */
     async linkAccount({ user }) {
       if (!user.id) return;
       await prisma.user.update({

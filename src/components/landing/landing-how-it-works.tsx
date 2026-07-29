@@ -8,7 +8,7 @@ const STEPS = [
   {
     step: "1",
     title: "Sign up",
-    body: "Create an account with your email, or continue with Google.",
+    body: "Create an account with Google (recommended), or sign up with email if you prefer.",
   },
   {
     step: "2",

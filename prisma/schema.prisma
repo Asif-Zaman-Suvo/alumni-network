@@ -93,6 +93,9 @@ model VerificationRequest {
   @@index([passingYear])
   @@index([userId, createdAt])
   @@index([sscRoll, sscRegistration, passingYear])
+  // Partial uniques live in SQL migrations:
+  // - VerificationRequest_ssc_verified_key (status = VERIFIED)
+  // - VerificationRequest_ssc_pending_key (status = PENDING)
 }
 
 model Department {

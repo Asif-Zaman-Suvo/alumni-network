@@ -16,13 +16,20 @@ import {
   PASSWORD_RESET_TTL_MS,
 } from "@/lib/tokens";
 import { getViewer } from "@/lib/dal/session";
-import { slugify } from "@/lib/utils";
+import { isUniqueViolation, uniqueViolationMatches } from "@/lib/prisma-errors";
+import { createProfileWithUniqueSlug } from "@/lib/unique-slug";
 import {
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
   resetPasswordSchema,
 } from "@/lib/validation";
+
+const SSC_TAKEN_FIELD_ERRORS = {
+  sscRoll: ["These SSC details are already registered."],
+  sscRegistration: ["These SSC details are already registered."],
+  passingYear: ["These SSC details are already registered."],
+};
 
 /**
  * Registration creates the account AND the first verification request in one transaction.
@@ -52,37 +59,70 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
     });
   }
 
-  const passwordHash = await hash(password, 12);
-  const slug = await uniqueSlug(fullName);
-
-  await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email,
-        passwordHash,
-        status: "PENDING",
-        profile: {
-          create: {
-            slug,
-            displayName: fullName,
-            graduationYear: passingYear,
-          },
-        },
-      },
-      select: { id: true },
-    });
-
-    await tx.verificationRequest.create({
-      data: {
-        userId: user.id,
-        sscRoll,
-        sscRegistration,
-        passingYear,
-        fullNameOnCert: fullName,
-        status: "PENDING",
-      },
-    });
+  // Soft pre-check for UX. Integrity is enforced by partial unique indexes on PENDING/VERIFIED.
+  const sscTaken = await prisma.verificationRequest.findFirst({
+    where: {
+      sscRoll,
+      sscRegistration,
+      passingYear,
+      status: { in: ["VERIFIED", "PENDING"] },
+      user: { deletedAt: null },
+    },
+    select: { id: true, status: true },
   });
+  if (sscTaken) {
+    return actionError(
+      sscTaken.status === "VERIFIED"
+        ? "An alumni account with these SSC details already exists. Sign in with that account, or link Google from settings after you are verified."
+        : "These SSC details are already under review for another account. Contact the alumni office if this is a mistake.",
+      SSC_TAKEN_FIELD_ERRORS,
+    );
+  }
+
+  const passwordHash = await hash(password, 12);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          status: "PENDING",
+        },
+        select: { id: true },
+      });
+
+      await createProfileWithUniqueSlug(tx, {
+        userId: user.id,
+        displayName: fullName,
+        graduationYear: passingYear,
+      });
+
+      await tx.verificationRequest.create({
+        data: {
+          userId: user.id,
+          sscRoll,
+          sscRegistration,
+          passingYear,
+          fullNameOnCert: fullName,
+          status: "PENDING",
+        },
+      });
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      if (uniqueViolationMatches(error, ["email"])) {
+        return actionError("An account with this email already exists.", {
+          email: ["An account with this email already exists."],
+        });
+      }
+      return actionError(
+        "These SSC details are already registered or under review for another account.",
+        SSC_TAKEN_FIELD_ERRORS,
+      );
+    }
+    throw error;
+  }
 
   await signIn("credentials", { email, password, redirect: false });
 
@@ -255,20 +295,4 @@ export async function requestEmailVerificationAction(): Promise<ActionResult> {
   );
 
   return actionOk(undefined, "Check your inbox for a confirmation link.");
-}
-
-/** Profile slugs are user-visible URLs, so collisions are resolved with a numeric suffix. */
-async function uniqueSlug(displayName: string): Promise<string> {
-  const base = slugify(displayName) || "alum";
-
-  for (let attempt = 0; attempt < 25; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
-    const taken = await prisma.profile.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    });
-    if (!taken) return candidate;
-  }
-
-  return `${base}-${Date.now().toString(36)}`;
 }

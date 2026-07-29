@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { InfoIcon } from "lucide-react";
 import { SscForm } from "@/components/verification/ssc-form";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getOwnVerificationState } from "@/lib/dal/verification";
 import { requireViewer } from "@/lib/dal/session";
@@ -13,8 +11,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * Where Google sign-ups land. OAuth cannot collect SSC details during the redirect, so this
- * is the step that turns an UNVERIFIED account into a reviewable request.
+ * Where Google first-time sign-ins land. OAuth cannot collect SSC during the
+ * provider redirect. Email+password signup already collected SSC on /register and never
+ * visits this page.
+ *
+ * Submitting SSC here either blocks when those numbers already belong to a VERIFIED
+ * alumni (sign in with that account instead), or opens a PENDING admin review for a
+ * new claim.
  */
 export default async function OnboardingPage() {
   const viewer = await requireViewer();
@@ -31,20 +34,12 @@ export default async function OnboardingPage() {
         <CardHeader>
           <CardTitle className="text-xl">One more step</CardTitle>
           <CardDescription>
-            Your account is created. Now confirm that you are a former student so an
-            administrator can activate it.
+            Confirm you studied here. If these numbers already belong to an approved alumni
+            account, we will ask you to sign in with that account instead. Otherwise an
+            administrator will review your request.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Alert variant="info">
-            <InfoIcon />
-            <AlertTitle>These numbers stay private</AlertTitle>
-            <AlertDescription>
-              Your roll and registration numbers are only visible to administrators. They are
-              never shown in the directory or on your profile.
-            </AlertDescription>
-          </Alert>
-
+        <CardContent>
           <SscForm
             defaultName={viewer.name ?? undefined}
             attemptsRemaining={state.attemptsRemaining}

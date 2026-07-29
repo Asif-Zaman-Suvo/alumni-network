@@ -6,7 +6,13 @@ import type { z } from "zod";
  */
 export type ActionResult<T = undefined> =
   | { ok: true; data: T; message?: string }
-  | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
+  | {
+      ok: false;
+      error: string;
+      fieldErrors?: Record<string, string[]>;
+      /** Optional structured payload (e.g. masked email when SSC matches an existing alum). */
+      data?: T;
+    };
 
 export function actionOk(): ActionResult;
 export function actionOk<T>(data: T, message?: string): ActionResult<T>;
@@ -17,8 +23,23 @@ export function actionOk<T>(data?: T, message?: string): ActionResult<T | undefi
 export function actionError(
   error: string,
   fieldErrors?: Record<string, string[]>,
-): ActionResult<never> {
-  return { ok: false, error, ...(fieldErrors ? { fieldErrors } : {}) };
+): ActionResult<never>;
+export function actionError<T>(
+  error: string,
+  fieldErrors: Record<string, string[]> | undefined,
+  data: T,
+): ActionResult<T>;
+export function actionError<T>(
+  error: string,
+  fieldErrors?: Record<string, string[]>,
+  data?: T,
+): ActionResult<T> | ActionResult<never> {
+  return {
+    ok: false,
+    error,
+    ...(fieldErrors ? { fieldErrors } : {}),
+    ...(data !== undefined ? { data } : {}),
+  };
 }
 
 export function fromZodError(error: z.ZodError): ActionResult<never> {

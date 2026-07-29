@@ -11,6 +11,11 @@ declare module "next-auth" {
       isEmailVerified: boolean;
       profileComplete: boolean;
     } & DefaultSession["user"];
+    /**
+     * Passed through `unstable_update` after an OAuth stub is merged onto a VERIFIED
+     * alumni account. Not a normal session field — only consumed by the jwt callback.
+     */
+    switchToUserId?: string;
   }
 
   interface User {
