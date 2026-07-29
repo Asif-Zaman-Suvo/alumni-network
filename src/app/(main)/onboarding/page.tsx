@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { InfoIcon } from "lucide-react";
 import { SscForm } from "@/components/verification/ssc-form";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getOwnVerificationState } from "@/lib/dal/verification";
 import { requireViewer } from "@/lib/dal/session";
@@ -17,8 +15,9 @@ export const metadata: Metadata = {
  * provider redirect. Email+password signup already collected SSC on /register and never
  * visits this page.
  *
- * Submitting SSC here either links this login to an already-VERIFIED alumni account, or
- * opens a PENDING admin review for a new claim.
+ * Submitting SSC here either blocks when those numbers already belong to a VERIFIED
+ * alumni (sign in with that account instead), or opens a PENDING admin review for a
+ * new claim.
  */
 export default async function OnboardingPage() {
   const viewer = await requireViewer();
@@ -35,21 +34,12 @@ export default async function OnboardingPage() {
         <CardHeader>
           <CardTitle className="text-xl">One more step</CardTitle>
           <CardDescription>
-            Confirm you studied here. If you already have an approved alumni account, these
-            numbers will link this social login to it. Otherwise an administrator will review
-            your request.
+            Confirm you studied here. If these numbers already belong to an approved alumni
+            account, we will ask you to sign in with that account instead. Otherwise an
+            administrator will review your request.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Alert variant="info">
-            <InfoIcon />
-            <AlertTitle>These numbers stay private</AlertTitle>
-            <AlertDescription>
-              Your roll and registration numbers are only visible to administrators. They are
-              never shown in the directory or on your profile.
-            </AlertDescription>
-          </Alert>
-
+        <CardContent>
           <SscForm
             defaultName={viewer.name ?? undefined}
             attemptsRemaining={state.attemptsRemaining}

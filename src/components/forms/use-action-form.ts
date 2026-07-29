@@ -56,7 +56,14 @@ export function useActionForm<T>(action: ServerAction<T>, options: Options = {})
         router.refresh();
       }
     } else if (!state.fieldErrors) {
-      toast({ title: state.error, variant: "error" });
+      // Structured client-handled errors (e.g. blocked existing account) render inline.
+      const clientHandled =
+        state.data &&
+        typeof state.data === "object" &&
+        "existingAccount" in state.data;
+      if (!clientHandled) {
+        toast({ title: state.error, variant: "error" });
+      }
     }
   }, [state, redirectTo, router, successToast, onSuccess, resetOnSuccess]);
 

@@ -1,21 +1,66 @@
 /**
- * ISO 3166-1 alpha-2 is stored rather than a free-text country, so the directory facet has
- * one bucket per country instead of one per spelling. Names are resolved at render time via
- * Intl, which keeps this list to codes only.
+ * ISO 3166-1 alpha-2 is stored rather than free-text country, so the directory facet has
+ * one bucket per country instead of one per spelling.
+ *
+ * Names are a fixed English map — not `Intl.DisplayNames`. Node and browsers ship different
+ * ICU data (e.g. HK → "Hong Kong SAR China" vs "Hong Kong"), which would hydrate-mismatch
+ * any SSR `<option>` list built from Intl.
  */
 
-const displayNames =
-  typeof Intl !== "undefined" && "DisplayNames" in Intl
-    ? new Intl.DisplayNames(["en"], { type: "region" })
-    : null;
+const COUNTRY_NAMES: Record<string, string> = {
+  BD: "Bangladesh",
+  IN: "India",
+  PK: "Pakistan",
+  LK: "Sri Lanka",
+  NP: "Nepal",
+  US: "United States",
+  CA: "Canada",
+  GB: "United Kingdom",
+  AU: "Australia",
+  NZ: "New Zealand",
+  DE: "Germany",
+  FR: "France",
+  NL: "Netherlands",
+  SE: "Sweden",
+  NO: "Norway",
+  DK: "Denmark",
+  FI: "Finland",
+  IT: "Italy",
+  ES: "Spain",
+  IE: "Ireland",
+  CH: "Switzerland",
+  AT: "Austria",
+  BE: "Belgium",
+  PL: "Poland",
+  AE: "United Arab Emirates",
+  SA: "Saudi Arabia",
+  QA: "Qatar",
+  KW: "Kuwait",
+  OM: "Oman",
+  BH: "Bahrain",
+  MY: "Malaysia",
+  SG: "Singapore",
+  JP: "Japan",
+  KR: "South Korea",
+  CN: "China",
+  HK: "Hong Kong",
+  TH: "Thailand",
+  ID: "Indonesia",
+  PH: "Philippines",
+  VN: "Vietnam",
+  ZA: "South Africa",
+  NG: "Nigeria",
+  KE: "Kenya",
+  EG: "Egypt",
+  TR: "Turkey",
+  BR: "Brazil",
+  MX: "Mexico",
+  AR: "Argentina",
+};
 
 export function countryName(code: string): string {
   const upper = code.toUpperCase();
-  try {
-    return displayNames?.of(upper) ?? upper;
-  } catch {
-    return upper;
-  }
+  return COUNTRY_NAMES[upper] ?? upper;
 }
 
 /** Countries offered in the profile editor. Deliberately short: the common cases first. */

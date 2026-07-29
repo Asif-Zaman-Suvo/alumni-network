@@ -1,19 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { unstable_update } from "@/auth";
+import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
-import { homeForStatus } from "@/lib/auth-routes";
 import { getViewer } from "@/lib/dal/session";
 import { MAX_SUBMISSION_ATTEMPTS } from "@/lib/dal/verification";
 import { sendVerificationReceived } from "@/lib/email";
 import {
   decideSscLink,
+  deleteOAuthStubUser,
   findBlockingPendingOwnerBySsc,
-  findVerifiedOwnerBySsc,
-  isUniqueViolation,
-  mergeOAuthStubIntoUser,
-  OAuthLinkConflictError,
+  findVerifiedAlumniBySsc,
+  maskEmail,
 } from "@/lib/oauth-link";
 import { prisma } from "@/lib/prisma";
 import { consumeRateLimit, formatRetryAfter, RATE_LIMITS } from "@/lib/rate-limit";
@@ -23,18 +21,25 @@ import { sscSubmissionSchema } from "@/lib/validation";
 
 export type VerificationSubmitData = {
   redirectTo?: string;
+  /**
+   * Case 1: SSC matches a VERIFIED alumni. Full email is never returned — only a mask.
+   * The OAuth stub has been deleted and the session cleared.
+   */
+  existingAccount?: {
+    maskedEmail: string;
+    hasPassword: boolean;
+  };
 };
 
 /**
  * Submits SSC details for OAuth onboarding (`UNVERIFIED`) and for resubmission after
  * rejection.
  *
- * Account-linking flow (comments intentional — this is the product rule):
- * 1. Look up a VERIFIED VerificationRequest with the same roll + registration.
- * 2. If found on another User → move this session's OAuth Account rows onto that User,
- *    delete the stub, switch the JWT. That is linking, not admin approval.
- * 3. If another User already has a PENDING claim for that SSC → reject (no steal).
- * 4. Otherwise create PENDING on this User and wait for an administrator.
+ * One alumni = one account = one email:
+ * 1. VERIFIED match on roll + registration + passing year → block. Do not merge Google,
+ *    do not enqueue admin review. Delete the Auth.js stub, sign out, return masked email.
+ * 2. Another user already PENDING for that identity → conflict (no email leak).
+ * 3. Otherwise create PENDING on this stub and wait for an administrator.
  *
  * OAuth email is never used to decide which alumni record this is.
  */
@@ -74,16 +79,16 @@ export async function submitVerificationAction(
   }
 
   const { fullNameOnCert, sscRoll, sscRegistration, passingYear } = parsed.data;
-  const identity = { sscRoll, sscRegistration };
+  const identity = { sscRoll, sscRegistration, passingYear };
 
-  const [verifiedOwnerId, blockingOwnerId] = await Promise.all([
-    findVerifiedOwnerBySsc(identity),
+  const [verifiedMatch, blockingOwnerId] = await Promise.all([
+    findVerifiedAlumniBySsc(identity),
     findBlockingPendingOwnerBySsc(identity),
   ]);
 
   const decision = decideSscLink({
     viewerId: viewer.id,
-    verifiedOwnerId,
+    verifiedOwnerId: verifiedMatch?.userId ?? null,
     blockingOwnerId,
   });
 
@@ -91,44 +96,33 @@ export async function submitVerificationAction(
     return actionError(decision.message);
   }
 
-  if (decision.kind === "merge") {
-    try {
-      await mergeOAuthStubIntoUser(viewer.id, decision.targetUserId);
-    } catch (error) {
-      if (error instanceof OAuthLinkConflictError) return actionError(error.message);
-      if (isUniqueViolation(error)) {
-        return actionError(
-          "This social login is already linked to a different account. Contact the alumni office.",
-        );
-      }
-      throw error;
+  if (decision.kind === "block_existing" && verifiedMatch) {
+    // Only delete Auth.js OAuth stubs (UNVERIFIED). REJECTED resubmits must not wipe the user.
+    if (viewer.status === "UNVERIFIED") {
+      await deleteOAuthStubUser(viewer.id);
+      await signOut({ redirect: false });
+
+      revalidatePath("/onboarding");
+      revalidatePath("/login");
+
+      return actionError(
+        "We found an existing account associated with this alumni record. Please sign in using the registered email instead.",
+        undefined,
+        {
+          existingAccount: {
+            maskedEmail: maskEmail(verifiedMatch.email),
+            hasPassword: verifiedMatch.hasPassword,
+          },
+        },
+      );
     }
 
-    const target = await prisma.user.findUnique({
-      where: { id: decision.targetUserId },
-      select: {
-        status: true,
-        profileComplete: true,
-        role: true,
+    return actionError(
+      "An alumni account with these SSC details already exists. Sign in with that account instead.",
+      {
+        sscRoll: ["These SSC details are already registered."],
+        sscRegistration: ["These SSC details are already registered."],
       },
-    });
-
-    await unstable_update({
-      switchToUserId: decision.targetUserId,
-    } as { switchToUserId: string });
-
-    const redirectTo = homeForStatus(target?.status, {
-      profileComplete: target?.profileComplete,
-      isStaff: target?.role === "ADMIN" || target?.role === "MODERATOR",
-    });
-
-    revalidatePath("/onboarding");
-    revalidatePath("/directory");
-    revalidatePath("/settings/profile");
-
-    return actionOk(
-      { redirectTo },
-      "Your social login is now linked to your existing alumni account.",
     );
   }
 
@@ -158,7 +152,6 @@ export async function submitVerificationAction(
       data: { status: "PENDING" },
     });
 
-    // OAuth users arrive with no profile row; create a minimal one for admin approval.
     const profile = await tx.profile.findUnique({
       where: { userId: viewer.id },
       select: { id: true },
@@ -183,7 +176,7 @@ export async function submitVerificationAction(
 
   return actionOk(
     { redirectTo: "/verification-status" },
-    "Submitted. An administrator will review your details shortly.",
+    "Your verification request has been submitted successfully. Our administrators will review your information and notify you once it has been approved.",
   );
 }
 

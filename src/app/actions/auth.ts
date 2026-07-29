@@ -52,12 +52,13 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
     });
   }
 
-  // Alumni identity is SSC roll + registration, not email. Block a second claim when the
-  // identity is already verified or already waiting in the admin queue under another user.
+  // Alumni identity is SSC roll + registration + passing year, not email.
+  // Block a second claim when that identity is VERIFIED or PENDING under another user.
   const sscTaken = await prisma.verificationRequest.findFirst({
     where: {
       sscRoll,
       sscRegistration,
+      passingYear,
       status: { in: ["VERIFIED", "PENDING"] },
       user: { deletedAt: null },
     },
@@ -71,6 +72,7 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
       {
         sscRoll: ["These SSC details are already registered."],
         sscRegistration: ["These SSC details are already registered."],
+        passingYear: ["These SSC details are already registered."],
       },
     );
   }
