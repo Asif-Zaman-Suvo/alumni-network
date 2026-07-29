@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 export { decideSscLink, maskEmail, type SscLinkDecision } from "@/lib/oauth-link-decision";
+export { isUniqueViolation } from "@/lib/prisma-errors";
 
 /**
  * Account helpers for OAuth + SSC identity.
@@ -14,7 +15,9 @@ export { decideSscLink, maskEmail, type SscLinkDecision } from "@/lib/oauth-link
  */
 
 export const OAUTH_LINK_COOKIE = "oauth_link_user";
+export const OAUTH_LINK_ERROR_COOKIE = "oauth_link_error";
 const OAUTH_LINK_MAX_AGE_SEC = 10 * 60;
+const OAUTH_LINK_ERROR_MAX_AGE_SEC = 5 * 60;
 
 export type SscIdentity = {
   sscRoll: string;
@@ -157,12 +160,6 @@ export class OAuthLinkConflictError extends Error {
   }
 }
 
-export function isUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
-  );
-}
-
 /** Verified session user wants to attach Google without re-entering SSC. */
 export async function setOAuthLinkIntent(userId: string): Promise<void> {
   const jar = await cookies();
@@ -185,6 +182,25 @@ export async function consumeOAuthLinkIntent(): Promise<string | null> {
 export async function clearOAuthLinkIntent(): Promise<void> {
   const jar = await cookies();
   jar.delete(OAUTH_LINK_COOKIE);
+}
+
+/** Flash error after a failed Settings → Link Google attempt (JWT callback cannot toast). */
+export async function setOAuthLinkError(message: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(OAUTH_LINK_ERROR_COOKIE, message, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: OAUTH_LINK_ERROR_MAX_AGE_SEC,
+  });
+}
+
+export async function consumeOAuthLinkError(): Promise<string | null> {
+  const jar = await cookies();
+  const value = jar.get(OAUTH_LINK_ERROR_COOKIE)?.value ?? null;
+  if (value) jar.delete(OAUTH_LINK_ERROR_COOKIE);
+  return value;
 }
 
 export async function listLinkedProviders(userId: string) {

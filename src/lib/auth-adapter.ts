@@ -2,7 +2,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { Role, UserStatus } from "@prisma/client";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/utils";
+import { createProfileWithUniqueSlug } from "@/lib/unique-slug";
 
 type AlumniAdapterUser = AdapterUser & {
   role: Role;
@@ -42,13 +42,10 @@ export function createAlumniAuthAdapter(): Adapter {
       // Best-effort profile so JWT can show a name/avatar before onboarding finishes.
       if (name || image) {
         const displayName = name?.trim() || email.split("@")[0] || "Alumni";
-        await prisma.profile.create({
-          data: {
-            userId: user.id,
-            slug: await uniqueSlug(displayName),
-            displayName,
-            avatarUrl: image ?? null,
-          },
+        await createProfileWithUniqueSlug(prisma, {
+          userId: user.id,
+          displayName,
+          avatarUrl: image ?? null,
         });
       }
 
@@ -104,9 +101,7 @@ export function createAlumniAuthAdapter(): Adapter {
           await prisma.profile.update({
             where: { userId: id },
             data: {
-              ...(name !== undefined && name
-                ? { displayName: name }
-                : {}),
+              ...(name !== undefined && name ? { displayName: name } : {}),
               ...(image !== undefined ? { avatarUrl: image } : {}),
             },
           });
@@ -116,13 +111,10 @@ export function createAlumniAuthAdapter(): Adapter {
             select: { email: true },
           });
           const displayName = name?.trim() || row.email.split("@")[0] || "Alumni";
-          await prisma.profile.create({
-            data: {
-              userId: id,
-              slug: await uniqueSlug(displayName),
-              displayName,
-              avatarUrl: image ?? null,
-            },
+          await createProfileWithUniqueSlug(prisma, {
+            userId: id,
+            displayName,
+            avatarUrl: image ?? null,
           });
         }
       }
@@ -186,19 +178,4 @@ function toAdapterUser(
     status: user.status,
     profileComplete: user.profileComplete,
   };
-}
-
-async function uniqueSlug(displayName: string): Promise<string> {
-  const base = slugify(displayName) || "alum";
-
-  for (let attempt = 0; attempt < 25; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
-    const taken = await prisma.profile.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    });
-    if (!taken) return candidate;
-  }
-
-  return `${base}-${Date.now().toString(36)}`;
 }

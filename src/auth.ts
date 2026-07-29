@@ -6,8 +6,10 @@ import { authConfig } from "@/auth.config";
 import { createAlumniAuthAdapter } from "@/lib/auth-adapter";
 import {
   consumeOAuthLinkIntent,
+  deleteOAuthStubUser,
   mergeOAuthStubIntoUser,
   OAuthLinkConflictError,
+  setOAuthLinkError,
 } from "@/lib/oauth-link";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validation";
@@ -16,9 +18,9 @@ import { loginSchema } from "@/lib/validation";
  * Full Auth.js instance: adapter, credentials verification and the DB-backed JWT callback.
  *
  * OAuth return visits resolve via `Account(provider, providerAccountId)`.
- * First-time OAuth creates a stub User; SSC onboarding may merge that stub onto a
- * VERIFIED alumni. Settings "Link provider" sets a short-lived cookie so the stub
- * created by Auth.js is merged into the already-verified session user instead.
+ * First-time OAuth creates a stub User; SSC onboarding blocks if that SSC is already
+ * VERIFIED (no auto-merge). Settings "Link provider" sets a short-lived cookie so the
+ * stub created by Auth.js is merged into the already-verified session user instead.
  */
 
 const TOKEN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
@@ -134,6 +136,22 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
               return applyUserClaims(token, linkTargetId);
             } catch (error) {
               if (!(error instanceof OAuthLinkConflictError)) throw error;
+
+              await setOAuthLinkError(
+                "This Google account is already linked to another alumni profile. Unlink it there first, or use a different Google account.",
+              );
+
+              // Restore the verified session that started Link Google. Drop an OAuth stub
+              // created for this attempt so it does not linger as a second User.
+              const incoming = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { status: true },
+              });
+              if (incoming?.status === "UNVERIFIED") {
+                await deleteOAuthStubUser(user.id);
+              }
+
+              return applyUserClaims(token, linkTargetId);
             }
           }
         }

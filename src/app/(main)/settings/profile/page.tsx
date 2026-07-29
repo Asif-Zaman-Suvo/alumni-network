@@ -11,7 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getOwnProfile, listDepartments } from "@/lib/dal/profiles";
 import { requireVerifiedViewer } from "@/lib/dal/session";
-import { listLinkedProviders } from "@/lib/oauth-link";
+import { consumeOAuthLinkError, listLinkedProviders } from "@/lib/oauth-link";
 
 export const metadata: Metadata = {
   title: "Edit profile",
@@ -23,16 +23,17 @@ export default async function ProfileSettingsPage(props: {
 }) {
   const searchParams = await props.searchParams;
   const viewer = await requireVerifiedViewer();
-  const [profile, departments, linkedAccounts] = await Promise.all([
+  const [profile, departments, linkedAccounts, linkError] = await Promise.all([
     getOwnProfile(),
     listDepartments(),
     listLinkedProviders(viewer.id),
+    consumeOAuthLinkError(),
   ]);
 
   if (!profile) notFound();
 
   const needsComplete = searchParams.complete === "1" || !viewer.profileComplete;
-  const justLinked = searchParams.linked === "1";
+  const justLinked = searchParams.linked === "1" && !linkError;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-10 sm:px-6">
@@ -52,6 +53,13 @@ export default async function ProfileSettingsPage(props: {
           </Button>
         ) : null}
       </header>
+
+      {linkError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Could not link Google</AlertTitle>
+          <AlertDescription>{linkError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {justLinked ? (
         <Alert variant="success">

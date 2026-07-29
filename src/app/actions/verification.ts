@@ -14,9 +14,10 @@ import {
   maskEmail,
 } from "@/lib/oauth-link";
 import { prisma } from "@/lib/prisma";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import { consumeRateLimit, formatRetryAfter, RATE_LIMITS } from "@/lib/rate-limit";
 import { uploadCertificate } from "@/lib/storage";
-import { slugify } from "@/lib/utils";
+import { createProfileWithUniqueSlug } from "@/lib/unique-slug";
 import { sscSubmissionSchema } from "@/lib/validation";
 
 export type VerificationSubmitData = {
@@ -134,40 +135,50 @@ export async function submitVerificationAction(
     documentPath = upload.path;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.verificationRequest.create({
-      data: {
-        userId: viewer.id,
-        sscRoll,
-        sscRegistration,
-        passingYear,
-        fullNameOnCert,
-        documentPath,
-        status: "PENDING",
-      },
-    });
-
-    await tx.user.update({
-      where: { id: viewer.id },
-      data: { status: "PENDING" },
-    });
-
-    const profile = await tx.profile.findUnique({
-      where: { userId: viewer.id },
-      select: { id: true },
-    });
-
-    if (!profile) {
-      await tx.profile.create({
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.verificationRequest.create({
         data: {
           userId: viewer.id,
-          slug: await uniqueSlug(tx, fullNameOnCert),
-          displayName: fullNameOnCert,
-          graduationYear: passingYear,
+          sscRoll,
+          sscRegistration,
+          passingYear,
+          fullNameOnCert,
+          documentPath,
+          status: "PENDING",
         },
       });
+
+      await tx.user.update({
+        where: { id: viewer.id },
+        data: { status: "PENDING" },
+      });
+
+      const profile = await tx.profile.findUnique({
+        where: { userId: viewer.id },
+        select: { id: true },
+      });
+
+      if (!profile) {
+        await createProfileWithUniqueSlug(tx, {
+          userId: viewer.id,
+          displayName: fullNameOnCert,
+          graduationYear: passingYear,
+        });
+      }
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      return actionError(
+        "These SSC details are already registered or under review for another account.",
+        {
+          sscRoll: ["These SSC details are already registered."],
+          sscRegistration: ["These SSC details are already registered."],
+        },
+      );
     }
-  });
+    throw error;
+  }
 
   await sendVerificationReceived(viewer.email);
 
@@ -178,28 +189,4 @@ export async function submitVerificationAction(
     { redirectTo: "/verification-status" },
     "Your verification request has been submitted successfully. Our administrators will review your information and notify you once it has been approved.",
   );
-}
-
-type SlugClient = {
-  profile: {
-    findUnique(args: {
-      where: { slug: string };
-      select: { id: true };
-    }): Promise<unknown>;
-  };
-};
-
-async function uniqueSlug(client: SlugClient, displayName: string): Promise<string> {
-  const base = slugify(displayName) || "alum";
-
-  for (let attempt = 0; attempt < 25; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`;
-    const taken = await client.profile.findUnique({
-      where: { slug: candidate },
-      select: { id: true },
-    });
-    if (!taken) return candidate;
-  }
-
-  return `${base}-${Date.now().toString(36)}`;
 }
