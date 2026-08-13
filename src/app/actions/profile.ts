@@ -4,6 +4,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { unstable_update } from "@/auth";
 import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
+import { AUDIT_REASONS } from "@/lib/audit-events";
+import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecycle";
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
 import { prisma } from "@/lib/prisma";
@@ -288,6 +290,14 @@ export async function deleteOwnAccountAction(): Promise<ActionResult> {
     await tx.user.update({
       where: { id: viewer.id },
       data: { deletedAt: new Date() },
+    });
+
+    // Includes the session running this request, so the sign-out below finds nothing left to
+    // close and the LOGOUT event does not compete with SESSION_REVOKED for the same session.
+    await revokeUserSessions(tx, {
+      userId: viewer.id,
+      reason: AUDIT_REASONS.accountClosed,
+      context: await getRequestContext(),
     });
   });
 

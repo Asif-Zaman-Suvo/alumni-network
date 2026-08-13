@@ -90,6 +90,7 @@ export const authConfig = {
       session.user.status = token.status;
       session.user.isEmailVerified = Boolean(token.isEmailVerified);
       session.user.profileComplete = Boolean(token.profileComplete);
+      session.user.sessionId = token.sessionId;
       return session;
     },
   },

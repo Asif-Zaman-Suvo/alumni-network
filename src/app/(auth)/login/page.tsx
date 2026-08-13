@@ -53,7 +53,7 @@ export default async function LoginPage(props: {
   if (viewer) {
     const home = homeForStatus(viewer.status, {
       profileComplete: viewer.profileComplete,
-      isStaff: viewer.isStaff,
+      isAdmin: viewer.isAdmin,
     });
     const dest =
       viewer.isVerified &&

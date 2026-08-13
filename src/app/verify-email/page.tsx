@@ -86,7 +86,7 @@ export default async function VerifyEmailPage(props: {
     redirect(
       homeForStatus(viewer.status, {
         profileComplete: viewer.profileComplete,
-        isStaff: viewer.isStaff,
+        isAdmin: viewer.isAdmin,
       }),
     );
   }

@@ -44,7 +44,10 @@ const config = [
       "src/lib/rate-limit.ts",
       "src/lib/oauth-link.ts",
       "src/lib/auth-adapter.ts",
+      // Session state and its audit trail, not profile data.
+      "src/lib/auth/**",
       "src/app/actions/**",
+      "src/app/api/cron/**",
       "src/auth.ts",
       "prisma/**",
     ],

@@ -1,8 +1,14 @@
 import { compare } from "bcryptjs";
-import NextAuth from "next-auth";
+import NextAuth, { type User } from "next-auth";
+import type { AdapterUser } from "next-auth/adapters";
 import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "@/auth.config";
+import { AUTH_PROVIDERS, type AuthProvider } from "@/lib/audit-events";
+import {
+  endSessionByLogout,
+  startSession,
+} from "@/lib/auth/session-lifecycle";
 import { createAlumniAuthAdapter } from "@/lib/auth-adapter";
 import {
   consumeOAuthLinkIntent,
@@ -49,6 +55,99 @@ async function applyUserClaims(token: JWT, userId: string): Promise<JWT | null> 
   token.name = fresh.profile?.displayName ?? token.name;
   token.picture = fresh.profile?.avatarUrl ?? token.picture;
   token.refreshedAt = Date.now();
+  return token;
+}
+
+/**
+ * Applies the claims carried by a fresh sign-in, resolving the "Link provider" merge flow.
+ *
+ * Extracted from the jwt callback so that callback has exactly one place where a session is
+ * opened; previously each branch returned its own token and any new branch would silently skip
+ * whatever the last one did.
+ */
+async function resolveSignInToken(
+  token: JWT,
+  user: User | AdapterUser,
+): Promise<JWT | null> {
+  const userId = user.id;
+  if (!userId) return null;
+
+  token.sub = userId;
+  if (user.role) token.role = user.role;
+  if (user.status) token.status = user.status;
+  if (user.name !== undefined) token.name = user.name;
+  if (user.image !== undefined) token.picture = user.image;
+  token.isEmailVerified = Boolean("emailVerified" in user ? user.emailVerified : false);
+  token.profileComplete = Boolean(user.profileComplete);
+
+  const linkTargetId = await consumeOAuthLinkIntent();
+  if (linkTargetId && linkTargetId !== userId) {
+    const target = await prisma.user.findUnique({
+      where: { id: linkTargetId },
+      select: { id: true, status: true, deletedAt: true },
+    });
+
+    if (target && !target.deletedAt && target.status === "VERIFIED") {
+      try {
+        await mergeOAuthStubIntoUser(userId, linkTargetId);
+        return applyUserClaims(token, linkTargetId);
+      } catch (error) {
+        if (!(error instanceof OAuthLinkConflictError)) throw error;
+
+        await setOAuthLinkError(
+          "This Google account is already linked to another alumni profile. Unlink it there first, or use a different Google account.",
+        );
+
+        // Restore the verified session that started Link Google. Drop an OAuth stub
+        // created for this attempt so it does not linger as a second User.
+        const incoming = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { status: true },
+        });
+        if (incoming?.status === "UNVERIFIED") {
+          await deleteOAuthStubUser(userId);
+        }
+
+        return applyUserClaims(token, linkTargetId);
+      }
+    }
+  }
+
+  if (!token.role || !token.status) {
+    return applyUserClaims(token, userId);
+  }
+
+  token.refreshedAt = Date.now();
+  return token;
+}
+
+function toAuthProvider(provider: string | undefined): AuthProvider {
+  switch (provider) {
+    case "google":
+      return AUTH_PROVIDERS.google;
+    case "facebook":
+      return AUTH_PROVIDERS.facebook;
+    default:
+      return AUTH_PROVIDERS.credentials;
+  }
+}
+
+/**
+ * Opens an AuthSession row for a token that has just been issued and records LOGIN_SUCCESS.
+ *
+ * If this fails the sign-in fails with it. A token without a `sessionId` claim is rejected by the
+ * DAL, so issuing one would hand the user a cookie that cannot authenticate anything — better to
+ * surface the error at the login form.
+ */
+async function attachSession(token: JWT, provider: string | undefined): Promise<JWT> {
+  if (!token.sub) return token;
+
+  const authProvider = toAuthProvider(provider);
+  token.sessionId = await startSession({
+    userId: token.sub,
+    provider: authProvider,
+  });
+  token.authProvider = authProvider;
   return token;
 }
 
@@ -101,67 +200,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session && typeof session === "object") {
-        const switchTo =
-          "switchToUserId" in session && typeof session.switchToUserId === "string"
-            ? session.switchToUserId
-            : null;
-        if (switchTo) {
-          return applyUserClaims(token, switchTo);
-        }
-      }
-
+    async jwt({ token, user, trigger, account }) {
       if (user?.id) {
-        token.sub = user.id;
-        if (user.role) token.role = user.role;
-        if (user.status) token.status = user.status;
-        if (user.name !== undefined) token.name = user.name;
-        if (user.image !== undefined) token.picture = user.image;
-        token.isEmailVerified = Boolean(
-          "emailVerified" in user ? user.emailVerified : false,
-        );
-        token.profileComplete = Boolean(user.profileComplete);
+        const signedIn = await resolveSignInToken(token, user);
+        if (!signedIn) return null;
 
-        const linkTargetId = await consumeOAuthLinkIntent();
-        if (linkTargetId && linkTargetId !== user.id) {
-          const target = await prisma.user.findUnique({
-            where: { id: linkTargetId },
-            select: { id: true, status: true, deletedAt: true },
-          });
-
-          if (target && !target.deletedAt && target.status === "VERIFIED") {
-            try {
-              await mergeOAuthStubIntoUser(user.id, linkTargetId);
-              return applyUserClaims(token, linkTargetId);
-            } catch (error) {
-              if (!(error instanceof OAuthLinkConflictError)) throw error;
-
-              await setOAuthLinkError(
-                "This Google account is already linked to another alumni profile. Unlink it there first, or use a different Google account.",
-              );
-
-              // Restore the verified session that started Link Google. Drop an OAuth stub
-              // created for this attempt so it does not linger as a second User.
-              const incoming = await prisma.user.findUnique({
-                where: { id: user.id },
-                select: { status: true },
-              });
-              if (incoming?.status === "UNVERIFIED") {
-                await deleteOAuthStubUser(user.id);
-              }
-
-              return applyUserClaims(token, linkTargetId);
-            }
-          }
-        }
-
-        if (!token.role || !token.status) {
-          return applyUserClaims(token, user.id);
-        }
-
-        token.refreshedAt = Date.now();
-        return token;
+        // Session creation happens after the OAuth link/merge branches above have settled, so
+        // the AuthSession belongs to the account the user actually ends up signed in as — not
+        // to the throwaway stub Auth.js created for the provider callback.
+        return attachSession(signedIn, account?.provider);
       }
 
       const stale = Date.now() - (token.refreshedAt ?? 0) > TOKEN_REFRESH_INTERVAL_MS;
@@ -179,6 +226,27 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         where: { id: user.id },
         data: { emailVerified: new Date() },
       });
+    },
+    /**
+     * The single convergence point for every sign-out path: the server action, the client
+     * `next-auth/react` call in the user menu, and any Auth.js-internal sign-out. Instrumenting
+     * the individual call sites instead would guarantee one of them eventually drifts.
+     *
+     * Auth.js clears the cookie regardless of what happens here, which is the behaviour we want:
+     * a database outage must not be able to keep someone signed in.
+     */
+    async signOut(message) {
+      const sessionId =
+        "token" in message && message.token && typeof message.token === "object"
+          ? message.token.sessionId
+          : undefined;
+      if (!sessionId) return;
+
+      try {
+        await endSessionByLogout(sessionId);
+      } catch (error) {
+        console.error(`[auth] could not close session ${sessionId}:`, error);
+      }
     },
   },
 });

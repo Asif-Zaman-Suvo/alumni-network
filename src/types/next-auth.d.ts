@@ -10,12 +10,12 @@ declare module "next-auth" {
       /** Mirrors JWT; Auth.js `User.emailVerified` stays `Date | null`. */
       isEmailVerified: boolean;
       profileComplete: boolean;
+      /**
+       * `AuthSession.id` for this sign-in. Absent on tokens minted before session tracking
+       * existed, which the DAL treats as unusable so those users re-authenticate once.
+       */
+      sessionId?: string;
     } & DefaultSession["user"];
-    /**
-     * Passed through `unstable_update` after an OAuth stub is merged onto a VERIFIED
-     * alumni account. Not a normal session field — only consumed by the jwt callback.
-     */
-    switchToUserId?: string;
   }
 
   interface User {
@@ -37,5 +37,12 @@ declare module "@auth/core/jwt" {
     profileComplete: boolean;
     /** Epoch ms of the last database refresh, so role and status changes propagate. */
     refreshedAt: number;
+    /**
+     * `AuthSession.id`. The claim that lets a stateless token be revoked: the DAL resolves it
+     * to a row and rejects the request if that row is no longer ACTIVE.
+     */
+    sessionId?: string;
+    /** Which provider opened this session, carried for audit attribution on sign-out. */
+    authProvider?: string;
   }
 }

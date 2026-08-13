@@ -5,6 +5,13 @@
 //   1. Profile.searchVector as a GENERATED ALWAYS ... STORED tsvector column + GIN index
 //   2. The pg_trgm extension and a trigram index on Profile.displayName
 //   3. A partial unique index on VerificationRequest rows whose status is VERIFIED
+//
+// prisma/migrations/20260813120000_auth_audit_realtime/migration.sql adds three more:
+//   4. A partial unique index making session lifecycle audit events idempotent
+//   5. app_private.broadcast_audit_log(), a trigger that pushes sanitised audit
+//      notifications onto a private Supabase Realtime channel
+//   6. app_private.can_read_audit_stream(), the SECURITY DEFINER predicate behind the
+//      realtime.messages RLS policy for that channel
 
 generator client {
   provider = "prisma-client-js"
@@ -20,7 +27,6 @@ datasource db {
 
 enum Role {
   ADMIN
-  MODERATOR
   ALUMNI
 }
 
@@ -62,6 +68,7 @@ model User {
   reviewed      VerificationRequest[] @relation("ReviewedBy")
   accounts      Account[]
   sessions      Session[]
+  authSessions  AuthSession[]
   auditLogs     AuditLog[]
   resetTokens   PasswordResetToken[]
 
@@ -159,18 +166,89 @@ model Profile {
   @@index([visibility])
 }
 
+/// Append-only history for staff mutations AND authentication lifecycle events.
+///
+/// Everything except `action` and `createdAt` is nullable because the table has to record
+/// events that have no actor row: a failed sign-in for an address that was never registered
+/// still has to leave a trace. `actorId` is SetNull rather than Cascade so deleting a user
+/// cannot silently erase what that user did.
 model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String
-  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  id      String  @id @default(cuid())
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Immutable copy of the actor's email at write time. Survives actor deletion and email changes.
+  actorEmail String?
+  actorRole  Role?
   action     String
-  targetType String
-  targetId   String
-  metadata   Json?
-  createdAt  DateTime @default(now())
+  targetType String?
+  targetId   String?
+
+  /// AuthSession.id. Deliberately not a foreign key: session rows are operational state with
+  /// their own lifecycle, and an audit row must never be mutated or removed by that lifecycle.
+  sessionId String?
+  /// "credentials", "google", "facebook", or "system" for machine-initiated events.
+  provider  String?
+  /// Keyed HMAC of the submitted address. Lets an operator correlate repeated failed sign-ins
+  /// without the table itself becoming a list of addresses that exist.
+  subjectHash String?
+  /// Coarse machine-readable cause, e.g. "invalid_credentials". Never a raw error message.
+  reason      String?
+  ipAddress   String?
+  userAgent   String?
+
+  metadata  Json?
+  createdAt DateTime @default(now())
 
   @@index([targetType, targetId])
   @@index([createdAt])
+  /// Keyset pagination: createdAt alone is not unique enough to be a stable cursor.
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([sessionId])
+  // A partial unique index enforcing one terminal event per session lives in SQL:
+  // - AuditLog_session_lifecycle_key
+}
+
+enum AuthSessionStatus {
+  /// Issued and not yet ended. The only status that may access the application.
+  ACTIVE
+  /// Ended by the user.
+  LOGGED_OUT
+  /// Passed `expiresAt` and was reaped by the expiry job.
+  EXPIRED
+  /// Ended by suspension, password reset, account closure, or an administrator.
+  REVOKED
+}
+
+/// Server-side registry of issued sessions.
+///
+/// Auth.js runs a stateless JWT strategy, which cannot express "this session was revoked
+/// three seconds ago" — the cookie stays cryptographically valid until it expires. This table
+/// is the authority the DAL checks on every request, so revocation takes effect immediately.
+/// Distinct from the `Session` model below, which belongs to the Auth.js adapter and is unused
+/// under the JWT strategy.
+model AuthSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status   AuthSessionStatus @default(ACTIVE)
+  provider String
+
+  ipAddress String?
+  userAgent String?
+
+  issuedAt  DateTime @default(now())
+  /// Mirrors the JWT `maxAge` so the expiry job and the cookie agree on the same instant.
+  expiresAt DateTime
+  endedAt   DateTime?
+  /// Coarse cause when status is REVOKED, e.g. "account_suspended".
+  endedReason String?
+
+  @@index([userId, issuedAt(sort: Desc)])
+  /// Drives the expiry sweep: find ACTIVE rows past expiresAt.
+  @@index([status, expiresAt])
 }
 
 model PasswordResetToken {

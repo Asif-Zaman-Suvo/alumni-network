@@ -17,7 +17,7 @@ export default async function RegisterPage() {
     redirect(
       homeForStatus(viewer.status, {
         profileComplete: viewer.profileComplete,
-        isStaff: viewer.isStaff,
+        isAdmin: viewer.isAdmin,
       }),
     );
   }

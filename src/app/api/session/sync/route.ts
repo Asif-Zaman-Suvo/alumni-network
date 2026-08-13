@@ -31,10 +31,9 @@ export async function GET(request: Request) {
   // Route Handler may set cookies; jwt callback reloads claims from the DB.
   await unstable_update({});
 
-  const isStaff = fresh.role === "ADMIN" || fresh.role === "MODERATOR";
   const destination = homeForStatus(fresh.status, {
     profileComplete: fresh.profileComplete,
-    isStaff,
+    isAdmin: fresh.role === "ADMIN",
   });
 
   return NextResponse.redirect(new URL(destination, request.url));

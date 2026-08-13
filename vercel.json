@@ -1,5 +1,11 @@
 {
   "buildCommand": "prisma migrate deploy && prisma generate && next build",
   "framework": "nextjs",
-  "regions": ["iad1"]
+  "regions": ["iad1"],
+  "crons": [
+    {
+      "path": "/api/cron/expire-sessions",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

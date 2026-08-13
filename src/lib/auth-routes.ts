@@ -6,11 +6,11 @@ import type { UserStatus } from "@prisma/client";
  */
 export function homeForStatus(
   status: UserStatus | undefined | null,
-  options?: { profileComplete?: boolean; isStaff?: boolean },
+  options?: { profileComplete?: boolean; isAdmin?: boolean },
 ): string {
   switch (status) {
     case "VERIFIED":
-      if (!options?.isStaff && options?.profileComplete === false) {
+      if (!options?.isAdmin && options?.profileComplete === false) {
         return "/settings/profile?complete=1";
       }
       return "/directory";

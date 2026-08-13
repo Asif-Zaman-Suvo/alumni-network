@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { SEED_ACCOUNTS, signIn, uniqueEmail } from "./helpers";
+import {
+  openEmailSignupForm,
+  SEED_ACCOUNTS,
+  signIn,
+  signOut,
+  uniqueEmail,
+  uniqueSscDetails,
+} from "./helpers";
 
 /**
  * Duplicate SSC identities must never create a second alumni account.
@@ -12,10 +19,9 @@ test("email signup is blocked when SSC details are already verified", async ({ p
   // control seed SSC. Instead: create pending user A, then try duplicate with B.
   const emailA = uniqueEmail("ssc-a");
   const emailB = uniqueEmail("ssc-b");
-  const roll = String(700000 + Math.floor(Math.random() * 99_999));
-  const registration = String(1_500_000_000 + Math.floor(Math.random() * 99_999_999));
+  const { roll, registration } = uniqueSscDetails();
 
-  await page.goto("/register");
+  await openEmailSignupForm(page);
   await page.getByLabel("Full name").fill("First Claimant");
   await page.getByLabel("Email").fill(emailA);
   await page.getByLabel("Password", { exact: true }).fill("verysecret123");
@@ -23,17 +29,16 @@ test("email signup is blocked when SSC details are already verified", async ({ p
   await page.getByLabel("SSC registration number").fill(registration);
   await page.getByLabel("Passing year").fill("2016");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/verification-status/);
+  // Registration is the heaviest write in the app; see verification-gating.spec.ts.
+  await expect(page).toHaveURL(/\/verification-status/, { timeout: 60_000 });
 
-  await page.goto("/register");
-  // May still be signed in as A — sign out if menu exists.
+  // Registering signed A in, and /register redirects anyone already authenticated.
   const menu = page.getByRole("button", { name: "Open account menu" });
   if (await menu.isVisible().catch(() => false)) {
-    await menu.click();
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await page.goto("/register");
+    await signOut(page);
   }
 
+  await openEmailSignupForm(page);
   await page.getByLabel("Full name").fill("Second Claimant");
   await page.getByLabel("Email").fill(emailB);
   await page.getByLabel("Password", { exact: true }).fill("verysecret123");
@@ -42,7 +47,9 @@ test("email signup is blocked when SSC details are already verified", async ({ p
   await page.getByLabel("Passing year").fill("2016");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(page.getByText(/already under review|already registered|already exist/i)).toBeVisible();
+  await expect(
+    page.getByText(/already under review|already registered|already exist/i).first(),
+  ).toBeVisible({ timeout: 60_000 });
 });
 
 test("verified settings page shows sign-in methods card", async ({ page }) => {

@@ -28,7 +28,7 @@ export async function SiteHeader() {
             </Button>
           ) : null}
 
-          {viewer?.isStaff ? (
+          {viewer?.isAdmin ? (
             <Button variant="ghost" size="sm" asChild>
               <Link href="/admin">
                 <ShieldCheckIcon />

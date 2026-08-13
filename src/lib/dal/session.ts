@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isSessionUsable } from "@/lib/auth/session-lifecycle";
 import { prisma } from "@/lib/prisma";
 import type { Role, UserStatus } from "@prisma/client";
 
@@ -12,9 +13,12 @@ export type Viewer = {
   role: Role;
   status: UserStatus;
   isVerified: boolean;
-  isStaff: boolean;
+  /** Administration is ADMIN-only; there is no intermediate staff tier. */
+  isAdmin: boolean;
   emailVerified: boolean;
   profileComplete: boolean;
+  /** `AuthSession.id` backing this request. Used to attribute audit rows to a session. */
+  sessionId: string;
 };
 
 /**
@@ -29,6 +33,18 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   const user = session?.user;
   if (!user?.id || !user.email) return null;
 
+  /**
+   * A JWT stays cryptographically valid for its full 30 days, so the cookie alone cannot answer
+   * "was this session revoked?". The AuthSession row can, and this is the one place every
+   * authenticated path funnels through, so the check belongs here rather than in each caller.
+   *
+   * Tokens issued before session tracking existed carry no `sessionId` and are rejected: honouring
+   * them would leave a month-long window of sessions nobody can revoke. Affected users sign in
+   * again once.
+   */
+  if (!user.sessionId) return null;
+  if (!(await isSessionUsable(user.sessionId, user.id))) return null;
+
   return {
     id: user.id,
     email: user.email,
@@ -37,9 +53,10 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     role: user.role,
     status: user.status,
     isVerified: user.status === "VERIFIED",
-    isStaff: user.role === "ADMIN" || user.role === "MODERATOR",
+    isAdmin: user.role === "ADMIN",
     emailVerified: Boolean(user.isEmailVerified),
     profileComplete: Boolean(user.profileComplete),
+    sessionId: user.sessionId,
   };
 });
 
@@ -96,19 +113,19 @@ export async function requireVerifiedViewer(): Promise<Viewer> {
 
 /**
  * Directory + member data require an approved account AND required contact fields
- * (WhatsApp + Facebook). Staff bypass the profile gate.
+ * (WhatsApp + Facebook). Administrators bypass the profile gate.
  */
 export async function requireDirectoryAccess(): Promise<Viewer> {
   const viewer = await requireVerifiedViewer();
-  if (!viewer.isStaff && !viewer.profileComplete) {
+  if (!viewer.isAdmin && !viewer.profileComplete) {
     redirect("/settings/profile?complete=1");
   }
   return viewer;
 }
 
-export async function requireStaffViewer(): Promise<Viewer> {
+export async function requireAdminViewer(): Promise<Viewer> {
   const viewer = await requireVerifiedViewer();
-  if (!viewer.isStaff) redirect("/directory");
+  if (!viewer.isAdmin) redirect("/directory");
   return viewer;
 }
 
@@ -120,8 +137,8 @@ export class ForbiddenError extends Error {
 }
 
 /** Server Action variant: throws rather than redirecting, so the caller can return a form error. */
-export async function assertStaff(): Promise<Viewer> {
+export async function assertAdmin(): Promise<Viewer> {
   const viewer = await getViewer();
-  if (!viewer || !viewer.isVerified || !viewer.isStaff) throw new ForbiddenError();
+  if (!viewer || !viewer.isVerified || !viewer.isAdmin) throw new ForbiddenError();
   return viewer;
 }

@@ -1,6 +1,6 @@
 import { AdminNav } from "@/components/admin/admin-nav";
 import { Badge } from "@/components/ui/badge";
-import { requireStaffViewer } from "@/lib/dal/session";
+import { requireAdminViewer } from "@/lib/dal/session";
 
 /**
  * Role is asserted here as well as in the proxy. The layout guard is what makes a missed
@@ -10,7 +10,7 @@ import { requireStaffViewer } from "@/lib/dal/session";
  * Suspense so the chrome (title + tabs) streams first while queries run.
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const viewer = await requireStaffViewer();
+  const viewer = await requireAdminViewer();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-10 sm:px-6">

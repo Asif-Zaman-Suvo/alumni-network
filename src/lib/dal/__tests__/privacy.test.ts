@@ -12,7 +12,7 @@ function viewer(partial: Partial<PrivacyViewer> & Pick<PrivacyViewer, "id">): Pr
     status: "VERIFIED",
     role: "ALUMNI",
     isVerified: true,
-    isStaff: false,
+    isAdmin: false,
     ...partial,
   };
 }
@@ -25,9 +25,9 @@ describe("directoryVisibilityLevels", () => {
     ]);
   });
 
-  it("lets staff see every visibility level", () => {
+  it("lets administrators see every visibility level", () => {
     assert.deepEqual(
-      directoryVisibilityLevels(viewer({ id: "admin", role: "ADMIN", isStaff: true })),
+      directoryVisibilityLevels(viewer({ id: "admin", role: "ADMIN", isAdmin: true })),
       ["PUBLIC", "MEMBERS_ONLY", "PRIVATE"],
     );
   });

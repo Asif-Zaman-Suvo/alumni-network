@@ -6,6 +6,13 @@ import { redirect } from "next/navigation";
 import { signIn, signOut } from "@/auth";
 import { clientEnv } from "@/env";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
+import {
+  AUDIT_REASONS,
+  AUTH_AUDIT_ACTIONS,
+  AUTH_PROVIDERS,
+} from "@/lib/audit-events";
+import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecycle";
+import { tryWriteAuthAuditLog } from "@/lib/dal/audit";
 import { sendEmailVerification, sendPasswordReset } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { consumeRateLimit, formatRetryAfter, RATE_LIMITS } from "@/lib/rate-limit";
@@ -145,12 +152,26 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
 
 export async function loginAction(formData: FormData): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return fromZodError(parsed.error);
+  if (!parsed.success) {
+    // No usable address to attribute the attempt to, so nothing is recorded. A malformed
+    // submission never reached credential verification.
+    return fromZodError(parsed.error);
+  }
 
   const { email, password } = parsed.data;
+  const context = await getRequestContext();
 
   const limit = await consumeRateLimit({ bucket: `login:${email}`, ...RATE_LIMITS.login });
   if (!limit.ok) {
+    // Recorded because a burst of these is the signal that matters for credential stuffing.
+    await tryWriteAuthAuditLog({
+      action: AUTH_AUDIT_ACTIONS.loginFailed,
+      provider: AUTH_PROVIDERS.credentials,
+      subjectEmail: email,
+      reason: AUDIT_REASONS.rateLimited,
+      ...context,
+    });
+
     return actionError(
       `Too many sign-in attempts. Try again in ${formatRetryAfter(limit.retryAfterSeconds)}.`,
     );
@@ -163,6 +184,17 @@ export async function loginAction(formData: FormData): Promise<ActionResult> {
     return actionOk();
   } catch (error) {
     if (error instanceof AuthError) {
+      // The audit row stores only an HMAC of the address, so recording the attempt does not
+      // build a list of which accounts exist — and the reply to the browser stays identical
+      // for unknown email and wrong password.
+      await tryWriteAuthAuditLog({
+        action: AUTH_AUDIT_ACTIONS.loginFailed,
+        provider: AUTH_PROVIDERS.credentials,
+        subjectEmail: email,
+        reason: AUDIT_REASONS.invalidCredentials,
+        ...context,
+      });
+
       // Same message for unknown email and wrong password so the form is not an oracle
       // for which accounts exist.
       return actionError("Email or password is incorrect.");
@@ -172,6 +204,8 @@ export async function loginAction(formData: FormData): Promise<ActionResult> {
 }
 
 export async function signOutAction(): Promise<void> {
+  // The LOGOUT audit row and the AuthSession transition are written by the `signOut` event in
+  // src/auth.ts, which every sign-out path funnels through.
   // redirect:false so Set-Cookie clearing is not dropped by a NEXT_REDIRECT race.
   await signOut({ redirect: false });
   redirect("/");
@@ -245,19 +279,29 @@ export async function resetPasswordAction(formData: FormData): Promise<ActionRes
   }
 
   const passwordHash = await hash(password, 12);
+  const context = await getRequestContext();
 
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
-    prisma.passwordResetToken.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: record.userId }, data: { passwordHash } });
+    await tx.passwordResetToken.update({
       where: { id: record.id },
       data: { usedAt: new Date() },
-    }),
+    });
     // Any other outstanding link for this account is now void.
-    prisma.passwordResetToken.updateMany({
+    await tx.passwordResetToken.updateMany({
       where: { userId: record.userId, usedAt: null },
       data: { usedAt: new Date() },
-    }),
-  ]);
+    });
+
+    // A reset is the remedy for a compromised password, so it has to end sessions someone else
+    // may already be holding. Same transaction as the password change: a reset that appears to
+    // succeed while leaving a hijacked session alive is worse than one that fails outright.
+    await revokeUserSessions(tx, {
+      userId: record.userId,
+      reason: AUDIT_REASONS.passwordReset,
+      context,
+    });
+  });
 
   return actionOk(undefined, "Password updated. You can sign in now.");
 }

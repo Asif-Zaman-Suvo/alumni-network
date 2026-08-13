@@ -137,7 +137,7 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
 
   // Unverified or incomplete alumni get nothing from the list.
   if (!viewer?.isVerified) return EMPTY_RESULT;
-  if (!viewer.isStaff && !viewer.profileComplete) return EMPTY_RESULT;
+  if (!viewer.isAdmin && !viewer.profileComplete) return EMPTY_RESULT;
 
   const page = Math.max(1, Math.floor(query.page ?? 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(query.pageSize ?? DEFAULT_PAGE_SIZE)));
@@ -466,7 +466,7 @@ export async function getDirectoryFilterOptions(): Promise<FilterOptionsPayload>
   if (!viewer?.isVerified) {
     return { departments: [], years: [], countries: [] };
   }
-  if (!viewer.isStaff && !viewer.profileComplete) {
+  if (!viewer.isAdmin && !viewer.profileComplete) {
     return { departments: [], years: [], countries: [] };
   }
   return loadDirectoryFilterOptions();

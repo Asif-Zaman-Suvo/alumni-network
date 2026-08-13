@@ -15,7 +15,7 @@ type UserRowActionsProps = {
   canManage: boolean;
 };
 
-const ROLES: Role[] = ["ALUMNI", "MODERATOR", "ADMIN"];
+const ROLES: Role[] = ["ALUMNI", "ADMIN"];
 
 export function UserRowActions({
   userId,

@@ -21,6 +21,11 @@ blob-report/
 
 .DS_Store
 *.pem
+
+# Dev server output and page captures taken while debugging a test run
+server*.log
+.e2e-*.html
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

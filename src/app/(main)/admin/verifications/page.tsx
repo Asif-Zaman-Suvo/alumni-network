@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getReviewQueue } from "@/lib/dal/admin";
-import { requireStaffViewer } from "@/lib/dal/session";
+import { requireAdminViewer } from "@/lib/dal/session";
 import { cn } from "@/lib/utils";
 import type { UserStatus } from "@prisma/client";
 
@@ -46,7 +46,7 @@ async function VerificationsBody({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const viewer = await requireStaffViewer();
+  const viewer = await requireAdminViewer();
   const searchParams = await searchParamsPromise;
 
   const status = STATUS_TABS.some((tab) => tab.value === searchParams.status)

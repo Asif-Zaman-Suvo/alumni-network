@@ -11,12 +11,12 @@ export type PrivacyViewer = {
   status: UserStatus;
   role: Role;
   isVerified: boolean;
-  isStaff: boolean;
+  isAdmin: boolean;
 };
 
 /** Visibility levels a viewer may see in a directory listing. */
 export function directoryVisibilityLevels(viewer: PrivacyViewer): Visibility[] {
-  if (viewer.isStaff) return ["PUBLIC", "MEMBERS_ONLY", "PRIVATE"];
+  if (viewer.isAdmin) return ["PUBLIC", "MEMBERS_ONLY", "PRIVATE"];
   return ["PUBLIC", "MEMBERS_ONLY"];
 }
 
@@ -42,7 +42,7 @@ export function canViewProfile(
   }
 
   if (isOwnProfile) return { allowed: true, isOwnProfile: true };
-  if (viewer?.isStaff) return { allowed: true, isOwnProfile: false };
+  if (viewer?.isAdmin) return { allowed: true, isOwnProfile: false };
   if (profile.visibility === "PUBLIC") return { allowed: true, isOwnProfile: false };
   if (profile.visibility === "MEMBERS_ONLY" && viewer?.isVerified) {
     return { allowed: true, isOwnProfile: false };

@@ -37,6 +37,26 @@ const serverSchema = z.object({
   SUPABASE_CERTIFICATE_BUCKET: z.string().min(1).default("verification-documents"),
   SUPABASE_AVATAR_BUCKET: z.string().min(1).default("avatars"),
 
+  /**
+   * Keys the HMAC that turns a submitted email into `AuditLog.subjectHash`. Rotating this
+   * makes older failed-login hashes uncorrelatable with newer ones, which is an acceptable
+   * trade for being able to retire the key.
+   */
+  AUDIT_HASH_SECRET: z.string().min(32, "Generate one with `openssl rand -base64 32`"),
+
+  /**
+   * ES256 private key (JWK, JSON) that is also imported into Supabase as the CURRENT JWT
+   * signing key — Supabase holds the pair and publishes the public half, so the same private
+   * key that signs here is what verification resolves to. Used only to mint the short-lived
+   * tokens that authorize the admin Realtime channel. See .env.example for the full procedure.
+   * Optional: without it the live stream degrades to manual refresh rather than failing boot.
+   */
+  SUPABASE_REALTIME_JWK: optionalSecret,
+  SUPABASE_REALTIME_JWT_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
+
+  /** Shared secret for the Vercel cron that reaps expired sessions. */
+  CRON_SECRET: optionalSecret,
+
   RESEND_API_KEY: optionalSecret,
   EMAIL_FROM: z.string().min(1).default("Alumni Network <onboarding@resend.dev>"),
 });

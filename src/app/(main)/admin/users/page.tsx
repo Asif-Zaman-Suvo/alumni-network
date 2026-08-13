@@ -18,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listUsers } from "@/lib/dal/admin";
-import { requireStaffViewer } from "@/lib/dal/session";
+import { requireAdminViewer } from "@/lib/dal/session";
 import { cn } from "@/lib/utils";
 import type { Role, UserStatus } from "@prisma/client";
 
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 type SearchParams = { q?: string; status?: string; role?: string; page?: string };
 
 const STATUSES: UserStatus[] = ["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"];
-const ROLES: Role[] = ["ALUMNI", "MODERATOR", "ADMIN"];
+const ROLES: Role[] = ["ALUMNI", "ADMIN"];
 
 const STATUS_VARIANT: Record<UserStatus, "success" | "warning" | "destructive" | "secondary"> = {
   VERIFIED: "success",
@@ -108,7 +108,7 @@ export default async function AdminUsersPage(props: {
 }
 
 async function UsersTable({ searchParams }: { searchParams: SearchParams }) {
-  const viewer = await requireStaffViewer();
+  const viewer = await requireAdminViewer();
 
   const page = Number.parseInt(searchParams.page ?? "1", 10) || 1;
   const result = await listUsers({

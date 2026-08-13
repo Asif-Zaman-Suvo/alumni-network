@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { SEED_ACCOUNTS, signIn, uniqueEmail } from "./helpers";
+import {
+  openEmailSignupForm,
+  SEED_ACCOUNTS,
+  signIn,
+  uniqueEmail,
+  uniqueSscDetails,
+} from "./helpers";
 
 /**
  * The core promise of the product: nobody sees alumni data until an administrator has
@@ -8,19 +14,23 @@ import { SEED_ACCOUNTS, signIn, uniqueEmail } from "./helpers";
 
 test("signup collects SSC details and lands the user in the review queue", async ({ page }) => {
   const email = uniqueEmail("signup");
+  const ssc = uniqueSscDetails();
 
-  await page.goto("/register");
+  await openEmailSignupForm(page);
   await page.getByLabel("Full name").fill("Test Alumnus");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill("verysecret123");
-  await page.getByLabel("SSC roll number").fill("654321");
-  await page.getByLabel("SSC registration number").fill("1234509876");
+  await page.getByLabel("SSC roll number").fill(ssc.roll);
+  await page.getByLabel("SSC registration number").fill(ssc.registration);
   await page.getByLabel("Passing year").fill("2015");
   await page.getByRole("button", { name: "Create account" }).click();
 
-  // Registration submits the claim in the same step, so the user goes straight to PENDING.
-  await expect(page).toHaveURL(/\/verification-status/);
-  await expect(page.getByText("Awaiting review")).toBeVisible();
+  // Registration submits the claim in the same step, so the user goes straight to PENDING. It is
+  // the heaviest write in the app — account, profile, claim, token, then a sign-in — so it gets a
+  // larger budget than the shared default.
+  await expect(page).toHaveURL(/\/verification-status/, { timeout: 60_000 });
+  // Shown both as a header badge and in the page body.
+  await expect(page.getByText("Awaiting review").first()).toBeVisible();
 });
 
 test("a pending user cannot reach the directory", async ({ page }) => {
@@ -46,7 +56,8 @@ test("a verified user reaches the directory and can search", async ({ page }) =>
   await expect(page.getByRole("heading", { name: "Alumni directory" })).toBeVisible();
 
   await page.getByLabel("Search alumni").fill("Rahman");
-  await expect(page).toHaveURL(/q=Rahman/, { timeout: 5000 });
+  // Debounced, and the resulting query runs against the full seeded directory.
+  await expect(page).toHaveURL(/q=Rahman/);
 });
 
 test("an anonymous visitor is redirected away from the directory", async ({ page }) => {

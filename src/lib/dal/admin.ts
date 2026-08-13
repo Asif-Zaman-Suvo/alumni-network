@@ -1,16 +1,16 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { assertStaff, type Viewer } from "@/lib/dal/session";
+import { assertAdmin, type Viewer } from "@/lib/dal/session";
 import { createCertificateSignedUrl } from "@/lib/storage";
 import { Prisma, type Role, type UserStatus } from "@prisma/client";
 
 /**
- * Staff-only reads and writes.
+ * Admin-only reads and writes.
  *
  * This is the ONLY module permitted to select sscRoll / sscRegistration or to mint a signed
  * certificate URL. Keeping it separate from src/lib/dal/profiles.ts means a careless `select`
  * in the public profile path cannot expose SSC identifiers, no matter what it asks for.
- * Every function begins with assertStaff().
+ * Every function begins with assertAdmin().
  */
 
 export type ReviewQueueItem = {
@@ -51,7 +51,7 @@ export type ReviewQueue = {
 };
 
 export async function getReviewQueue(filters: ReviewQueueFilters): Promise<ReviewQueue> {
-  await assertStaff();
+  await assertAdmin();
 
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const pageSize = Math.max(1, Math.floor(filters.pageSize ?? REVIEW_PAGE_SIZE));
@@ -165,7 +165,7 @@ export async function getReviewQueue(filters: ReviewQueueFilters): Promise<Revie
  * the admin UI cannot be shared.
  */
 export async function getCertificateUrl(requestId: string): Promise<string | null> {
-  await assertStaff();
+  await assertAdmin();
 
   const request = await prisma.verificationRequest.findUnique({
     where: { id: requestId },
@@ -236,7 +236,7 @@ const loadReviewCounts = unstable_cache(
 );
 
 export async function getReviewCounts(): Promise<ReviewCounts> {
-  await assertStaff();
+  await assertAdmin();
 
   const cached = await loadReviewCounts();
   const oldestPendingAt = cached.oldestPendingAt ? new Date(cached.oldestPendingAt) : null;
@@ -271,7 +271,7 @@ export async function listUsers(filters: {
   role?: Role;
   page?: number;
 }): Promise<{ users: ManagedUser[]; total: number; page: number; totalPages: number }> {
-  await assertStaff();
+  await assertAdmin();
 
   const page = Math.max(1, Math.floor(filters.page ?? 1));
   const pageSize = REVIEW_PAGE_SIZE;
@@ -340,67 +340,8 @@ export async function listUsers(filters: {
   };
 }
 
-export type AuditEntry = {
-  id: string;
-  action: string;
-  targetType: string;
-  targetId: string;
-  createdAt: Date;
-  metadata: Prisma.JsonValue;
-  actorEmail: string;
-};
-
-export async function listAuditLog(limit = 50): Promise<AuditEntry[]> {
-  await assertStaff();
-
-  const entries = await prisma.auditLog.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      action: true,
-      targetType: true,
-      targetId: true,
-      createdAt: true,
-      metadata: true,
-      actor: { select: { email: true } },
-    },
-  });
-
-  return entries.map((entry) => ({
-    id: entry.id,
-    action: entry.action,
-    targetType: entry.targetType,
-    targetId: entry.targetId,
-    createdAt: entry.createdAt,
-    metadata: entry.metadata,
-    actorEmail: entry.actor.email,
-  }));
-}
-
-/**
- * Append-only record of every staff mutation. Called inside the same transaction as the
- * mutation wherever possible so an action can never be applied without a trace.
- */
-export async function writeAuditLog(
-  client: Prisma.TransactionClient | typeof prisma,
-  entry: {
-    actorId: string;
-    action: string;
-    targetType: string;
-    targetId: string;
-    metadata?: Prisma.InputJsonValue;
-  },
-): Promise<void> {
-  await client.auditLog.create({
-    data: {
-      actorId: entry.actorId,
-      action: entry.action,
-      targetType: entry.targetType,
-      targetId: entry.targetId,
-      ...(entry.metadata === undefined ? {} : { metadata: entry.metadata }),
-    },
-  });
-}
+// Audit reads and writes moved to src/lib/dal/audit.ts. They no longer belong here: this
+// module asserts an administrator up front, and authentication events are written precisely
+// when nobody is authenticated.
 
 export type { Viewer };

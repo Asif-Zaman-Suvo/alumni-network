@@ -3,9 +3,12 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
-import { getCertificateUrl, writeAuditLog, ADMIN_REVIEW_COUNTS_TAG } from "@/lib/dal/admin";
+import { AUDIT_REASONS } from "@/lib/audit-events";
+import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecycle";
+import { getCertificateUrl, ADMIN_REVIEW_COUNTS_TAG } from "@/lib/dal/admin";
+import { writeStaffAuditLog } from "@/lib/dal/audit";
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
-import { assertStaff, ForbiddenError } from "@/lib/dal/session";
+import { assertAdmin, ForbiddenError, type Viewer } from "@/lib/dal/session";
 import { sendVerificationApproved, sendVerificationRejected } from "@/lib/email";
 import { Prisma, prisma } from "@/lib/prisma";
 import { reviewDecisionSchema } from "@/lib/validation";
@@ -19,9 +22,22 @@ function revalidateDirectoryCaches() {
 }
 
 /**
- * Staff mutations. Authorisation is asserted here (not only in the proxy) and every write
+ * Admin mutations. Authorisation is asserted here (not only in the proxy) and every write
  * is paired with an audit entry inside the same transaction.
  */
+
+/**
+ * Snapshots who performed an action, including the session it came from. Centralised so a new
+ * action cannot accidentally omit the actor identity the audit table now depends on.
+ */
+function auditActor(actor: Viewer) {
+  return {
+    actorId: actor.id,
+    actorEmail: actor.email,
+    actorRole: actor.role,
+    sessionId: actor.sessionId,
+  };
+}
 
 /**
  * Signed certificate URLs are minted on demand rather than embedded in the queue payload,
@@ -31,7 +47,7 @@ export async function getCertificateUrlAction(
   requestId: string,
 ): Promise<ActionResult<{ url: string }>> {
   try {
-    await assertStaff();
+    await assertAdmin();
   } catch (error) {
     if (error instanceof ForbiddenError) return actionError(error.message);
     throw error;
@@ -50,7 +66,7 @@ export async function reviewVerificationAction(
 ): Promise<ActionResult<ReviewOutcome>> {
   let actor;
   try {
-    actor = await assertStaff();
+    actor = await assertAdmin();
   } catch (error) {
     if (error instanceof ForbiddenError) return actionError(error.message);
     throw error;
@@ -99,8 +115,8 @@ export async function reviewVerificationAction(
         data: { status: nextStatus },
       });
 
-      await writeAuditLog(tx, {
-        actorId: actor.id,
+      await writeStaffAuditLog(tx, {
+        ...auditActor(actor),
         action: decision === "APPROVE" ? "verification.approve" : "verification.reject",
         targetType: "VerificationRequest",
         targetId: request.id,
@@ -155,7 +171,7 @@ export async function bulkApproveAction(
 ): Promise<ActionResult<{ approved: number; skipped: number }>> {
   let actor;
   try {
-    actor = await assertStaff();
+    actor = await assertAdmin();
   } catch (error) {
     if (error instanceof ForbiddenError) return actionError(error.message);
     throw error;
@@ -191,8 +207,8 @@ export async function bulkApproveAction(
 
         await tx.user.update({ where: { id: request.userId }, data: { status: "VERIFIED" } });
 
-        await writeAuditLog(tx, {
-          actorId: actor.id,
+        await writeStaffAuditLog(tx, {
+          ...auditActor(actor),
           action: "verification.approve.bulk",
           targetType: "VerificationRequest",
           targetId: request.id,
@@ -231,21 +247,16 @@ export async function bulkApproveAction(
 
 const roleChangeSchema = z.object({
   userId: z.string().min(1),
-  role: z.enum(["ADMIN", "MODERATOR", "ALUMNI"]),
+  role: z.enum(["ADMIN", "ALUMNI"]),
 });
 
 export async function changeUserRoleAction(formData: FormData): Promise<ActionResult> {
   let actor;
   try {
-    actor = await assertStaff();
+    actor = await assertAdmin();
   } catch (error) {
     if (error instanceof ForbiddenError) return actionError(error.message);
     throw error;
-  }
-
-  // Moderators review their batch; they cannot hand out privileges.
-  if (actor.role !== "ADMIN") {
-    return actionError("Only an administrator can change roles.");
   }
 
   const parsed = roleChangeSchema.safeParse(Object.fromEntries(formData));
@@ -257,15 +268,33 @@ export async function changeUserRoleAction(formData: FormData): Promise<ActionRe
     return actionError("You cannot remove your own administrator access.");
   }
 
+  const context = await getRequestContext();
+
   await prisma.$transaction(async (tx) => {
+    const previous = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { role: true },
+    });
+
     await tx.user.update({ where: { id: userId }, data: { role } });
-    await writeAuditLog(tx, {
-      actorId: actor.id,
+    await writeStaffAuditLog(tx, {
+      ...auditActor(actor),
       action: "user.role.change",
       targetType: "User",
       targetId: userId,
-      metadata: { role },
+      metadata: { role, previousRole: previous.role },
     });
+
+    // Role claims live in the JWT and only refresh hourly, so a demoted administrator would
+    // otherwise keep admin access — and an open Realtime subscription — until that refresh.
+    // Ending the sessions forces a re-issue with the new role.
+    if (previous.role === "ADMIN" && role !== "ADMIN") {
+      await revokeUserSessions(tx, {
+        userId,
+        reason: AUDIT_REASONS.adminRevoked,
+        context,
+      });
+    }
   });
 
   revalidatePath("/admin/users");
@@ -286,14 +315,10 @@ const suspensionSchema = z.object({
 export async function setUserSuspensionAction(formData: FormData): Promise<ActionResult> {
   let actor;
   try {
-    actor = await assertStaff();
+    actor = await assertAdmin();
   } catch (error) {
     if (error instanceof ForbiddenError) return actionError(error.message);
     throw error;
-  }
-
-  if (actor.role !== "ADMIN") {
-    return actionError("Only an administrator can suspend accounts.");
   }
 
   const parsed = suspensionSchema.safeParse(Object.fromEntries(formData));
@@ -305,17 +330,30 @@ export async function setUserSuspensionAction(formData: FormData): Promise<Actio
     return actionError("You cannot suspend your own account.");
   }
 
+  const context = await getRequestContext();
+
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: userId },
       data: { deletedAt: action === "SUSPEND" ? new Date() : null },
     });
-    await writeAuditLog(tx, {
-      actorId: actor.id,
+    await writeStaffAuditLog(tx, {
+      ...auditActor(actor),
       action: action === "SUSPEND" ? "user.suspend" : "user.restore",
       targetType: "User",
       targetId: userId,
     });
+
+    // Suspension has to take effect now, not whenever the suspended user's JWT next refreshes.
+    // Same transaction as the soft delete: a suspension that leaves a live session behind is
+    // the exact failure this table exists to prevent.
+    if (action === "SUSPEND") {
+      await revokeUserSessions(tx, {
+        userId,
+        reason: AUDIT_REASONS.accountSuspended,
+        context,
+      });
+    }
   });
 
   revalidatePath("/admin/users");

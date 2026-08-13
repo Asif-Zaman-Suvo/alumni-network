@@ -59,6 +59,16 @@ export const proxy = auth((request) => {
   const { pathname } = nextUrl;
   const session = request.auth;
 
+  /*
+   * Route Handlers authenticate themselves and answer with status codes. Redirecting them to
+   * /login would turn a 401 into an HTML page that `fetch` follows silently, and would break
+   * callers that legitimately have no session cookie at all — Vercel Cron authenticates with a
+   * bearer token, so redirecting it means the job never runs.
+   */
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   if (!session?.user) {
     if (isPublic(pathname)) return NextResponse.next();
 
@@ -68,7 +78,7 @@ export const proxy = auth((request) => {
   }
 
   const { status, role, profileComplete } = session.user;
-  const isStaff = role === "ADMIN" || role === "MODERATOR";
+  const isAdmin = role === "ADMIN";
   const isAdminArea = pathname.startsWith("/admin");
 
   // Always allow auth screens through. Pages call getViewer() and redirect when the
@@ -78,21 +88,16 @@ export const proxy = auth((request) => {
     return NextResponse.next();
   }
 
-  // Session claim refresh after admin approval — must run for PENDING JWTs.
-  if (pathname === "/api/session/sync") {
-    return NextResponse.next();
-  }
-
   if (!isAllowedForStatus(pathname, status)) {
     return redirect(
-      homeForStatus(status, { profileComplete, isStaff }),
+      homeForStatus(status, { profileComplete, isAdmin }),
       nextUrl,
     );
   }
 
-  if (status === "VERIFIED" && isAdminArea && !isStaff) {
+  if (status === "VERIFIED" && isAdminArea && !isAdmin) {
     return redirect(
-      homeForStatus(status, { profileComplete, isStaff }),
+      homeForStatus(status, { profileComplete, isAdmin }),
       nextUrl,
     );
   }

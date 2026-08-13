@@ -7,7 +7,9 @@ test("admin can open the verification queue and approve a pending request", asyn
   await signIn(page, ADMIN_EMAIL, SEED_PASSWORD);
 
   await page.goto("/admin/verifications");
-  await expect(page.getByRole("heading", { name: /verification/i })).toBeVisible();
+  // Every admin route shares the "Administration" heading from the layout, so the review queue is
+  // identified by its own tab strip rather than by a heading of its own.
+  await expect(page.getByRole("link", { name: "Review queue" })).toBeVisible();
 
   // Oldest-first queue: the first actionable row is the one we decide on.
   const approveButton = page.getByRole("button", { name: /^Approve$/ }).first();
@@ -23,6 +25,11 @@ test("admin can open the verification queue and approve a pending request", asyn
 test("admin users page lists alumni", async ({ page }) => {
   await signIn(page, ADMIN_EMAIL, SEED_PASSWORD);
   await page.goto("/admin/users");
-  await expect(page.getByRole("heading", { name: /users/i })).toBeVisible();
+  await expect(page.getByText(/\d+ users · page \d+ of \d+/)).toBeVisible();
+
+  // Hundreds of seeded alumni span many pages, so the account is reached by searching rather than
+  // by assuming it landed on the first one.
+  await page.getByPlaceholder("Search name or email").fill("alumni0@example.test");
+  await page.getByRole("button", { name: "Filter" }).click();
   await expect(page.getByText("alumni0@example.test")).toBeVisible();
 });
