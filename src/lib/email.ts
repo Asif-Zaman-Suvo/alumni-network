@@ -1,11 +1,5 @@
-import { Resend } from "resend";
-import { clientEnv, serverEnv } from "@/env";
-
-/**
- * Without RESEND_API_KEY (local development), emails are logged instead of sent so the
- * signup and reset flows stay walkable without a live provider.
- */
-const resend = serverEnv.RESEND_API_KEY ? new Resend(serverEnv.RESEND_API_KEY) : null;
+import { clientEnv } from "@/env";
+import { sendOutboundEmail } from "@/lib/email-provider";
 
 type SendArgs = {
   to: string;
@@ -40,25 +34,14 @@ function renderHtml({ heading, body, action }: Omit<SendArgs, "to" | "subject">)
 }
 
 async function send({ to, subject, heading, body, action }: SendArgs): Promise<void> {
-  if (!resend) {
-    console.info(
-      `[email:dev] to=${to} subject="${subject}"${action ? ` link=${action.url}` : ""}`,
-    );
-    return;
-  }
-
-  const result = await resend.emails.send({
-    from: serverEnv.EMAIL_FROM,
+  // Provider errors are logged, never thrown — losing the account write over a mail
+  // outage would be worse than a delayed inbox.
+  await sendOutboundEmail({
     to,
     subject,
     html: renderHtml({ heading, body, action }),
+    devLink: action?.url,
   });
-
-  if (result.error) {
-    // Never fail the surrounding mutation because of a mail provider hiccup; the user
-    // can always trigger a resend, and losing the account write would be worse.
-    console.error(`[email] failed to send "${subject}" to ${to}:`, result.error);
-  }
 }
 
 export function sendEmailVerification(to: string, url: string) {

@@ -57,8 +57,8 @@ const serverSchema = z.object({
   /** Shared secret for the Vercel cron that reaps expired sessions. */
   CRON_SECRET: optionalSecret,
 
-  RESEND_API_KEY: optionalSecret,
-  EMAIL_FROM: z.string().min(1).default("Alumni Network <onboarding@resend.dev>"),
+  BREVO_API_KEY: optionalSecret,
+  EMAIL_FROM: z.string().min(1).default("Alumni Network <your-verified-sender@gmail.com>"),
 });
 
 const clientSchema = z.object({

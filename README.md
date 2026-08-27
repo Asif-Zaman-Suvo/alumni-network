@@ -36,7 +36,7 @@ Alumni identity is defined by SSC credentials (roll, registration, and passing y
 | Live updates   | Supabase Realtime — Broadcast from Database, on a private channel |
 | Token signing  | jose (ES256) for the short-lived Realtime channel tokens          |
 | Scheduled jobs | Vercel Cron (daily session expiry sweep)                          |
-| Email          | Resend (optional)                                                 |
+| Email          | Brevo (optional)                                                  |
 | Validation     | Zod                                                               |
 | Runtime        | Node.js 20.9+                                                     |
 
@@ -143,7 +143,7 @@ Channel authorization does not trust the token alone. The RLS policy re-checks t
 | `SUPABASE_REALTIME_JWT_TTL_SECONDS`     | Channel token lifetime, 60–3600 (default `600`)                                                                        |
 | `CRON_SECRET`                           | Bearer secret for the session expiry cron (optional)                                                                   |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth (optional)                                                                                                |
-| `RESEND_API_KEY` / `EMAIL_FROM`         | Transactional email (optional)                                                                                         |
+| `BREVO_API_KEY` / `EMAIL_FROM`          | Transactional email (optional). `EMAIL_FROM` must be a sender verified in Brevo.                                       |
 
 `AUDIT_HASH_SECRET` is validated at startup, so a deployment without it fails outright rather than degrading. The Realtime and cron variables are optional: without them the audit page is a paginated history and expiry is enforced without being recorded.
 
