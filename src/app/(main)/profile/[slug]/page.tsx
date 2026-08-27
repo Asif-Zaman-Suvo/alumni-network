@@ -12,6 +12,7 @@ import {
   MapPinIcon,
   MessageCircleIcon,
   PencilIcon,
+  DropletIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { countryName } from "@/lib/countries";
+import { bloodGroupLabel } from "@/lib/blood-group";
 import { genderLabel } from "@/lib/gender";
 import { getProfileBySlug, type PublicProfile } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
@@ -67,6 +69,9 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     role ? { icon: BriefcaseIcon, label: role } : null,
     location ? { icon: MapPinIcon, label: location } : null,
     profile.gender ? { icon: UserIcon, label: genderLabel(profile.gender) } : null,
+    profile.bloodGroup
+      ? { icon: DropletIcon, label: bloodGroupLabel(profile.bloodGroup) }
+      : null,
   ].filter((fact): fact is { icon: typeof GraduationCapIcon; label: string } => fact !== null);
 
   const educationRows = buildEducationRows(profile);

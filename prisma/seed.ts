@@ -4,7 +4,7 @@
  *
  * Run with: npm run db:seed
  */
-import { Gender, PrismaClient, Visibility, type Prisma } from "@prisma/client";
+import { BloodGroup, Gender, PrismaClient, Visibility, type Prisma } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -51,6 +51,17 @@ const VISIBILITIES: Visibility[] = [
   Visibility.MEMBERS_ONLY,
   Visibility.PRIVATE,
 ];
+
+const BLOOD_GROUPS = [
+  BloodGroup.A_POSITIVE,
+  BloodGroup.A_NEGATIVE,
+  BloodGroup.B_POSITIVE,
+  BloodGroup.B_NEGATIVE,
+  BloodGroup.O_POSITIVE,
+  BloodGroup.O_NEGATIVE,
+  BloodGroup.AB_POSITIVE,
+  BloodGroup.AB_NEGATIVE,
+] as const;
 
 const VERIFIED_COUNT = 500;
 const PENDING_COUNT = 40;
@@ -203,6 +214,7 @@ function buildProfile(index: number, departmentIds: string[]): SeedProfile {
       showEmployer: random() < 0.85,
       gender: index % 2 === 0 ? Gender.MALE : Gender.FEMALE,
       showGender: random() < 0.4,
+      bloodGroup: maybe(pick(BLOOD_GROUPS), 0.7),
     },
   };
 }

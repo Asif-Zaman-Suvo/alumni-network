@@ -70,6 +70,8 @@ export async function requireViewer(): Promise<Viewer> {
  * When the JWT still says PENDING/REJECTED/UNVERIFIED, compare with Postgres.
  * Cookie updates cannot run in a Server Component — if claims drifted, bounce through
  * `/api/session/sync` (Route Handler) which refreshes the JWT then redirects home.
+ *
+ * Does not route UNVERIFIED → /onboarding: that would loop if called from onboarding itself.
  */
 export async function requireViewerWithFreshStatus(): Promise<Viewer> {
   const viewer = await requireViewer();
@@ -96,8 +98,6 @@ export async function requireViewerWithFreshStatus(): Promise<Viewer> {
   if (claimsChanged) {
     redirect("/api/session/sync");
   }
-
-  if (fresh.status === "UNVERIFIED") redirect("/onboarding");
 
   return viewer;
 }

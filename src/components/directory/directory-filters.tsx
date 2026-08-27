@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { countryName } from "@/lib/countries";
+import { BLOOD_GROUP_OPTIONS } from "@/lib/blood-group";
 import { cn } from "@/lib/utils";
 
 type FilterOptions = {
@@ -79,8 +80,8 @@ export function DirectoryFilters({ options }: { options: FilterOptions }) {
   };
 
   const view = searchParams.get("view") === "list" ? "list" : "grid";
-  const activeFilterCount = ["q", "department", "yearFrom", "yearTo", "country"].filter((key) =>
-    searchParams.get(key),
+  const activeFilterCount = ["q", "department", "yearFrom", "yearTo", "country", "bloodGroup"].filter(
+    (key) => searchParams.get(key),
   ).length;
 
   return (
@@ -214,6 +215,26 @@ export function DirectoryFilters({ options }: { options: FilterOptions }) {
               {options.countries.map((country) => (
                 <SelectItem key={country.code} value={country.code}>
                   {countryName(country.code)} ({country.count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Blood group</Label>
+          <Select
+            value={searchParams.get("bloodGroup") ?? ANY}
+            onValueChange={(value) => setParam("bloodGroup", value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Any group" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ANY}>Any group</SelectItem>
+              {BLOOD_GROUP_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>

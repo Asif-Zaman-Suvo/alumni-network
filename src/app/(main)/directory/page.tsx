@@ -4,6 +4,7 @@ import { DirectoryFilters } from "@/components/directory/directory-filters";
 import { DirectoryResults } from "@/components/directory/directory-results";
 import { Pagination } from "@/components/directory/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isBloodGroup } from "@/lib/blood-group";
 import {
   DEFAULT_PAGE_SIZE,
   getDirectoryFilterOptions,
@@ -24,6 +25,7 @@ type SearchParams = {
   yearFrom?: string;
   yearTo?: string;
   country?: string;
+  bloodGroup?: string;
   sort?: string;
   view?: string;
   page?: string;
@@ -47,6 +49,10 @@ export default async function DirectoryPage(props: {
     ? (searchParams.sort as DirectorySort)
     : undefined;
 
+  const bloodGroup = searchParams.bloodGroup && isBloodGroup(searchParams.bloodGroup)
+    ? searchParams.bloodGroup
+    : undefined;
+
   const [filterOptions, result] = await Promise.all([
     getDirectoryFilterOptions(),
     searchDirectory({
@@ -55,6 +61,7 @@ export default async function DirectoryPage(props: {
       yearFrom: parseYear(searchParams.yearFrom),
       yearTo: parseYear(searchParams.yearTo),
       countryCode: searchParams.country,
+      bloodGroup,
       sort,
       page: parseYear(searchParams.page) ?? 1,
       pageSize: DEFAULT_PAGE_SIZE,
@@ -74,6 +81,7 @@ export default async function DirectoryPage(props: {
     searchParams.yearFrom ?? "",
     searchParams.yearTo ?? "",
     searchParams.country ?? "",
+    searchParams.bloodGroup ?? "",
     searchParams.sort ?? "",
     searchParams.view ?? "grid",
     searchParams.page ?? "1",

@@ -123,7 +123,6 @@ export async function getReviewQueue(filters: ReviewQueueFilters): Promise<Revie
         WHERE d."status" = ${"VERIFIED"}::"UserStatus"
           AND d."sscRoll" = vr."sscRoll"
           AND d."sscRegistration" = vr."sscRegistration"
-          AND d."passingYear" = vr."passingYear"
           AND d."id" <> vr."id"
       ) AS "duplicateOfVerified"
     FROM "VerificationRequest" vr

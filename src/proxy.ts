@@ -89,6 +89,12 @@ export const proxy = auth((request) => {
   }
 
   if (!isAllowedForStatus(pathname, status)) {
+    // JWT status lags the database (SSC submit, admin approval). Bounce through
+    // session/sync instead of the stale home, or an approved user stays stuck on
+    // /onboarding and the approval email's /settings/profile link never lands.
+    if (status !== "VERIFIED") {
+      return redirect("/api/session/sync", nextUrl);
+    }
     return redirect(
       homeForStatus(status, { profileComplete, isAdmin }),
       nextUrl,

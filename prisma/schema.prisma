@@ -4,7 +4,7 @@
 // prisma/migrations/0_init/migration.sql:
 //   1. Profile.searchVector as a GENERATED ALWAYS ... STORED tsvector column + GIN index
 //   2. The pg_trgm extension and a trigram index on Profile.displayName
-//   3. A partial unique index on VerificationRequest rows whose status is VERIFIED
+//   3. Partial unique indexes on VerificationRequest (sscRoll, sscRegistration) for VERIFIED and PENDING — year is not part of identity
 //
 // prisma/migrations/20260813120000_auth_audit_realtime/migration.sql adds three more:
 //   4. A partial unique index making session lifecycle audit events idempotent
@@ -53,6 +53,17 @@ enum Visibility {
 enum Gender {
   MALE
   FEMALE
+}
+
+enum BloodGroup {
+  A_POSITIVE
+  A_NEGATIVE
+  B_POSITIVE
+  B_NEGATIVE
+  O_POSITIVE
+  O_NEGATIVE
+  AB_POSITIVE
+  AB_NEGATIVE
 }
 
 model User {
@@ -105,7 +116,7 @@ model VerificationRequest {
   @@index([passingYear])
   @@index([userId, createdAt])
   @@index([sscRoll, sscRegistration, passingYear])
-  // Partial uniques live in SQL migrations:
+  // Partial uniques live in SQL migrations — identity is roll + registration (year is not part of uniqueness):
   // - VerificationRequest_ssc_verified_key (status = VERIFIED)
   // - VerificationRequest_ssc_pending_key (status = PENDING)
 }
@@ -130,6 +141,8 @@ model Profile {
   gender         Gender?
   /// When true, directory and public profile may show gender.
   showGender     Boolean    @default(false)
+  /// Optional. Visible on directory cards and profiles whenever set.
+  bloodGroup     BloodGroup?
 
   graduationYear Int?
   degree         String?
@@ -172,6 +185,7 @@ model Profile {
   @@index([departmentId])
   @@index([countryCode])
   @@index([visibility])
+  @@index([bloodGroup])
 }
 
 /// Append-only history for staff mutations AND authentication lifecycle events.

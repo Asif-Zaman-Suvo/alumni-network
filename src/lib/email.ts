@@ -81,7 +81,7 @@ export function sendVerificationApproved(to: string, name: string) {
     ],
     action: {
       label: "Complete your profile",
-      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/settings/profile?complete=1`,
+      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/session/sync`,
     },
   });
 }
@@ -98,7 +98,7 @@ export function sendVerificationRejected(to: string, reason: string) {
     ],
     action: {
       label: "Submit again",
-      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/verification-status`,
+      url: `${clientEnv.NEXT_PUBLIC_APP_URL}/api/session/sync`,
     },
   });
 }

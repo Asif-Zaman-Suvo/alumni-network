@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
 import type { EditableProfile } from "@/lib/dal/profiles";
 import { EDUCATION_GROUPS } from "@/lib/education-groups";
+import { BLOOD_GROUP_OPTIONS } from "@/lib/blood-group";
 import { genderLabel } from "@/lib/gender";
 import { EARLIEST_PASSING_YEAR, LATEST_PASSING_YEAR } from "@/lib/validation";
 import { initialsOf } from "@/lib/utils";
@@ -187,6 +188,22 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
           ) : (
             <GenderField error={fieldError("gender")} />
           )}
+
+          <Field name="bloodGroup" label="Blood group" error={fieldError("bloodGroup")}>
+            <select
+              id="bloodGroup"
+              name="bloodGroup"
+              defaultValue={profile.bloodGroup ?? ""}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="">Prefer not to say</option>
+              {BLOOD_GROUP_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
 
           <Field
             name="headline"

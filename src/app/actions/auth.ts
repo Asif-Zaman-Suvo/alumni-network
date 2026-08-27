@@ -23,6 +23,10 @@ import {
   PASSWORD_RESET_TTL_MS,
 } from "@/lib/tokens";
 import { getViewer } from "@/lib/dal/session";
+import {
+  findBlockingPendingOwnerBySsc,
+  findVerifiedAlumniBySsc,
+} from "@/lib/oauth-link";
 import { isUniqueViolation, uniqueViolationMatches } from "@/lib/prisma-errors";
 import { createProfileWithUniqueSlug } from "@/lib/unique-slug";
 import {
@@ -33,9 +37,9 @@ import {
 } from "@/lib/validation";
 
 const SSC_TAKEN_FIELD_ERRORS = {
+  fullName: ["These SSC details are already registered."],
   sscRoll: ["These SSC details are already registered."],
   sscRegistration: ["These SSC details are already registered."],
-  passingYear: ["These SSC details are already registered."],
 };
 
 /**
@@ -67,19 +71,14 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
   }
 
   // Soft pre-check for UX. Integrity is enforced by partial unique indexes on PENDING/VERIFIED.
-  const sscTaken = await prisma.verificationRequest.findFirst({
-    where: {
-      sscRoll,
-      sscRegistration,
-      passingYear,
-      status: { in: ["VERIFIED", "PENDING"] },
-      user: { deletedAt: null },
-    },
-    select: { id: true, status: true },
-  });
-  if (sscTaken) {
+  const identity = { sscRoll, sscRegistration, passingYear, fullNameOnCert: fullName };
+  const [verifiedMatch, blockingOwnerId] = await Promise.all([
+    findVerifiedAlumniBySsc(identity),
+    findBlockingPendingOwnerBySsc(identity),
+  ]);
+  if (verifiedMatch || blockingOwnerId) {
     return actionError(
-      sscTaken.status === "VERIFIED"
+      verifiedMatch
         ? "An alumni account with these SSC details already exists. Sign in with that account, or link Google from settings after you are verified."
         : "These SSC details are already under review for another account. Contact the alumni office if this is a mistake.",
       SSC_TAKEN_FIELD_ERRORS,

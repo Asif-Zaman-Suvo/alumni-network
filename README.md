@@ -119,7 +119,7 @@ Channel authorization does not trust the token alone. The RLS policy re-checks t
 - **DAL** — authorization for directory, profiles, and admin data; public payloads never include SSC fields
 - **Data API** — every table has RLS enabled with no policies, and `anon` / `authenticated` hold no DML grants; all access is Prisma over a direct connection as the table owner
 - **Audit reads** — administrator-only, asserted inside `src/lib/dal/audit-read.ts` as well as at the route, so a caller that forgets fails closed
-- **Integrity** — partial unique indexes enforce one `VERIFIED` and one `PENDING` row per `(sscRoll, sscRegistration, passingYear)`, and one terminal event per session
+- **Integrity** — partial unique indexes enforce one `VERIFIED` and one `PENDING` row per `(sscRoll, sscRegistration)`, and one terminal event per session
 - **Search** — generated `tsvector` plus `pg_trgm` on display name
 - **Lifecycle** — soft-delete (`deletedAt`); export and account close from settings
 

@@ -44,15 +44,15 @@ function oauthErrorCopy(error: string | undefined): { title: string; body: strin
   }
 }
 
-/** Masked email from onboarding SSC conflict redirect — never a full address. */
+/** Registered email from onboarding SSC conflict redirect. */
 function existingSscFromSearch(params: {
   existingEmail?: string;
   hasPassword?: string;
-}): { maskedEmail: string; hasPassword: boolean } | null {
-  const maskedEmail = params.existingEmail?.trim();
-  if (!maskedEmail || !maskedEmail.includes("@") || maskedEmail.length > 254) return null;
+}): { email: string; hasPassword: boolean } | null {
+  const email = params.existingEmail?.trim();
+  if (!email || !email.includes("@") || email.length > 254) return null;
   return {
-    maskedEmail,
+    email,
     hasPassword: params.hasPassword === "1",
   };
 }
@@ -107,10 +107,9 @@ export default async function LoginPage(props: {
           </Alert>
           <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
             <p className="text-muted-foreground">Registered email</p>
-            <p className="mt-1 font-medium tracking-wide">{existingSscAccount.maskedEmail}</p>
+            <p className="mt-1 font-medium tracking-wide">{existingSscAccount.email}</p>
             <p className="mt-2 text-xs text-muted-foreground">
-              The full address is hidden for privacy. Use the account you originally registered
-              with
+              Use this address to sign in with the account you originally registered with
               {existingSscAccount.hasPassword
                 ? " (email and password, or Google if you linked it from settings)."
                 : " (Continue with Google if that is how you registered)."}

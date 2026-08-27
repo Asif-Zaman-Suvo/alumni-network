@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EDUCATION_GROUPS } from "@/lib/education-groups";
+import { BLOOD_GROUP_VALUES } from "@/lib/blood-group";
 
 export const EARLIEST_PASSING_YEAR = 1950;
 export const LATEST_PASSING_YEAR = new Date().getFullYear();
@@ -172,6 +173,13 @@ export const profileSchema = z.object({
   showEmployer: z.coerce.boolean(),
   showGender: z.coerce.boolean(),
   gender: z.enum(["MALE", "FEMALE"]).optional(),
+  bloodGroup: z
+    .union([
+      z.enum(BLOOD_GROUP_VALUES),
+      z.literal("").transform(() => null),
+      z.null(),
+    ])
+    .optional(),
 });
 
 export const reviewDecisionSchema = z

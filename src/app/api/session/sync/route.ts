@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 /**
  * Refreshes JWT claims from Postgres. Cookie writes are illegal in Server Components,
- * so status pages redirect here after detecting a stale PENDING/REJECTED session.
+ * so status pages and the proxy redirect here after detecting a stale session.
  */
 export async function GET(request: Request) {
   const session = await auth();

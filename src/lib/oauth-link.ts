@@ -23,7 +23,29 @@ export type SscIdentity = {
   sscRoll: string;
   sscRegistration: string;
   passingYear: number;
+  fullNameOnCert: string;
 };
+
+type SscStatus = "VERIFIED" | "PENDING";
+
+function sscBaseWhere(
+  identity: Pick<SscIdentity, "sscRoll" | "sscRegistration">,
+  status: SscStatus,
+) {
+  return {
+    status,
+    sscRoll: identity.sscRoll,
+    sscRegistration: identity.sscRegistration,
+    user: { deletedAt: null },
+  };
+}
+
+function sscNameWhere(fullNameOnCert: string | undefined) {
+  if (!fullNameOnCert) return undefined;
+  return {
+    fullNameOnCert: { equals: fullNameOnCert, mode: "insensitive" as const },
+  };
+}
 
 export type VerifiedAlumniMatch = {
   userId: string;
@@ -34,20 +56,27 @@ export type VerifiedAlumniMatch = {
 export async function findVerifiedAlumniBySsc(
   identity: SscIdentity,
 ): Promise<VerifiedAlumniMatch | null> {
-  const row = await prisma.verificationRequest.findFirst({
-    where: {
-      status: "VERIFIED",
-      sscRoll: identity.sscRoll,
-      sscRegistration: identity.sscRegistration,
-      passingYear: identity.passingYear,
-      user: { deletedAt: null },
-    },
-    select: {
-      userId: true,
-      user: { select: { email: true, passwordHash: true } },
-    },
-    orderBy: { reviewedAt: "desc" },
-  });
+  const select = {
+    userId: true,
+    user: { select: { email: true, passwordHash: true } },
+  } as const;
+  const orderBy = { reviewedAt: "desc" as const };
+  const base = sscBaseWhere(identity, "VERIFIED");
+  const nameWhere = sscNameWhere(identity.fullNameOnCert);
+
+  const row =
+    (nameWhere
+      ? await prisma.verificationRequest.findFirst({
+          where: { ...base, ...nameWhere },
+          select,
+          orderBy,
+        })
+      : null) ??
+    (await prisma.verificationRequest.findFirst({
+      where: base,
+      select,
+      orderBy,
+    }));
 
   if (!row) return null;
 
@@ -60,16 +89,14 @@ export async function findVerifiedAlumniBySsc(
 
 /** @deprecated Prefer findVerifiedAlumniBySsc — kept for any leftover call sites. */
 export async function findVerifiedOwnerBySsc(
-  identity: Omit<SscIdentity, "passingYear"> & { passingYear?: number },
+  identity: Omit<SscIdentity, "passingYear" | "fullNameOnCert"> & {
+    passingYear?: number;
+    fullNameOnCert?: string;
+  },
 ): Promise<string | null> {
-  if (identity.passingYear === undefined) {
+  if (identity.passingYear === undefined || !identity.fullNameOnCert) {
     const row = await prisma.verificationRequest.findFirst({
-      where: {
-        status: "VERIFIED",
-        sscRoll: identity.sscRoll,
-        sscRegistration: identity.sscRegistration,
-        user: { deletedAt: null },
-      },
+      where: sscBaseWhere(identity, "VERIFIED"),
       select: { userId: true },
       orderBy: { reviewedAt: "desc" },
     });
@@ -84,17 +111,25 @@ export async function findVerifiedOwnerBySsc(
 export async function findBlockingPendingOwnerBySsc(
   identity: SscIdentity,
 ): Promise<string | null> {
-  const row = await prisma.verificationRequest.findFirst({
-    where: {
-      status: "PENDING",
-      sscRoll: identity.sscRoll,
-      sscRegistration: identity.sscRegistration,
-      passingYear: identity.passingYear,
-      user: { deletedAt: null },
-    },
-    select: { userId: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const select = { userId: true } as const;
+  const orderBy = { createdAt: "asc" as const };
+  const base = sscBaseWhere(identity, "PENDING");
+  const nameWhere = sscNameWhere(identity.fullNameOnCert);
+
+  const row =
+    (nameWhere
+      ? await prisma.verificationRequest.findFirst({
+          where: { ...base, ...nameWhere },
+          select,
+          orderBy,
+        })
+      : null) ??
+    (await prisma.verificationRequest.findFirst({
+      where: base,
+      select,
+      orderBy,
+    }));
+
   return row?.userId ?? null;
 }
 

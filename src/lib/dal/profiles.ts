@@ -8,6 +8,7 @@ import { getViewer, type Viewer } from "@/lib/dal/session";
 import { EDUCATION_GROUPS } from "@/lib/education-groups";
 import { consumeMemoryRateLimit } from "@/lib/memory-rate-limit";
 import { RATE_LIMITS } from "@/lib/rate-limit";
+import { isBloodGroup, type BloodGroupValue } from "@/lib/blood-group";
 import type { Gender, Visibility } from "@prisma/client";
 
 /**
@@ -32,6 +33,7 @@ export type DirectoryEntry = {
   city: string | null;
   countryCode: string | null;
   gender: Gender | null;
+  bloodGroup: BloodGroupValue | null;
 };
 
 export type DirectorySort = "relevance" | "name" | "recent" | "year";
@@ -42,6 +44,7 @@ export type DirectoryQuery = {
   yearTo?: number;
   departmentId?: string;
   countryCode?: string;
+  bloodGroup?: BloodGroupValue;
   sort?: DirectorySort;
   page?: number;
   pageSize?: number;
@@ -100,6 +103,9 @@ function buildWhere(viewer: Viewer, query: DirectoryQuery): Prisma.Sql {
   }
   if (query.countryCode) {
     conditions.push(Prisma.sql`p."countryCode" = ${query.countryCode}`);
+  }
+  if (query.bloodGroup) {
+    conditions.push(Prisma.sql`p."bloodGroup" = ${query.bloodGroup}::"BloodGroup"`);
   }
 
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
@@ -171,6 +177,7 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
       p."city",
       p."countryCode",
       CASE WHEN p."showGender" THEN p."gender"::text ELSE NULL END AS "gender",
+      p."bloodGroup"::text AS "bloodGroup",
       d."name" AS "departmentName",
       COUNT(*) OVER()::int AS "total"
     FROM "Profile" p
@@ -182,9 +189,10 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
   `;
 
   const total = rows[0]?.total ?? 0;
-  const entries: DirectoryEntry[] = rows.map(({ total: _total, gender, ...entry }) => ({
+  const entries: DirectoryEntry[] = rows.map(({ total: _total, gender, bloodGroup, ...entry }) => ({
     ...entry,
     gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
+    bloodGroup: bloodGroup && isBloodGroup(bloodGroup) ? bloodGroup : null,
   }));
 
   return {
@@ -222,6 +230,7 @@ export type PublicProfile = {
   universitySession: string | null;
   email: string | null;
   gender: Gender | null;
+  bloodGroup: BloodGroupValue | null;
   visibility: Visibility;
   isOwnProfile: boolean;
 };
@@ -263,6 +272,7 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
       showEmployer: true,
       showGender: true,
       gender: true,
+      bloodGroup: true,
       department: { select: { name: true } },
       user: { select: { id: true, email: true, status: true, deletedAt: true } },
     },
@@ -311,6 +321,7 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
     universitySession: profile.universitySession,
     email: showEmail ? profile.user.email : null,
     gender: showGender ? profile.gender : null,
+    bloodGroup: profile.bloodGroup,
     visibility: profile.visibility,
     isOwnProfile: access.isOwnProfile,
   };
@@ -345,6 +356,7 @@ export type EditableProfile = {
   showEmployer: boolean;
   showGender: boolean;
   gender: Gender | null;
+  bloodGroup: BloodGroupValue | null;
 };
 
 export async function getOwnProfile(): Promise<EditableProfile | null> {
@@ -382,6 +394,7 @@ export async function getOwnProfile(): Promise<EditableProfile | null> {
       showEmployer: true,
       showGender: true,
       gender: true,
+      bloodGroup: true,
     },
   });
 }

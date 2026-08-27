@@ -98,6 +98,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       showEmail: data.showEmail,
       showEmployer: data.showEmployer,
       showGender: data.showGender,
+      bloodGroup: data.bloodGroup ?? null,
       ...(!existing.gender && data.gender ? { gender: data.gender } : {}),
       avatarUrl,
     },
@@ -163,6 +164,7 @@ export type PersonalDataExport = {
     showEmployer: boolean;
     showGender: boolean;
     gender: string | null;
+    bloodGroup: string | null;
   } | null;
   verificationRequests: Array<{
     sscRoll: string;
@@ -217,6 +219,7 @@ async function loadOwnDataExport(): Promise<ActionResult<PersonalDataExport>> {
           showEmployer: true,
           showGender: true,
           gender: true,
+          bloodGroup: true,
         },
       },
       verifications: {
@@ -289,53 +292,61 @@ export async function deleteOwnAccountAction(): Promise<ActionResult> {
 
   if (profile?.avatarUrl) await removeAvatar(profile.avatarUrl);
 
-  await prisma.$transaction(async (tx) => {
-    if (profile) {
-      await tx.profile.update({
-        where: { id: profile.id },
-        data: {
-          displayName: "Former member",
-          headline: null,
-          bio: null,
-          avatarUrl: null,
-          company: null,
-          position: null,
-          whatsappPhone: null,
-          linkedInUrl: null,
-          facebookUrl: null,
-          gender: null,
-          showGender: false,
-          websiteUrl: null,
-          city: null,
-          countryCode: null,
-          degree: null,
-          collegeName: null,
-          collegeDepartment: null,
-          collegeSession: null,
-          hscPassingYear: null,
-          universityName: null,
-          universityDepartment: null,
-          universitySession: null,
-          visibility: "PRIVATE",
-          showEmail: false,
-          showEmployer: false,
-        },
+  // Capture outside the interactive transaction — headers() must not stretch the DB txn window.
+  const context = await getRequestContext();
+
+  // Remote Supabase RTT: scrub + soft-delete + set-based revoke still needs a few round trips.
+  await prisma.$transaction(
+    async (tx) => {
+      if (profile) {
+        await tx.profile.update({
+          where: { id: profile.id },
+          data: {
+            displayName: "Former member",
+            headline: null,
+            bio: null,
+            avatarUrl: null,
+            company: null,
+            position: null,
+            whatsappPhone: null,
+            linkedInUrl: null,
+            facebookUrl: null,
+            gender: null,
+            showGender: false,
+            bloodGroup: null,
+            websiteUrl: null,
+            city: null,
+            countryCode: null,
+            degree: null,
+            collegeName: null,
+            collegeDepartment: null,
+            collegeSession: null,
+            hscPassingYear: null,
+            universityName: null,
+            universityDepartment: null,
+            universitySession: null,
+            visibility: "PRIVATE",
+            showEmail: false,
+            showEmployer: false,
+          },
+        });
+      }
+
+      await tx.user.update({
+        where: { id: viewer.id },
+        data: { deletedAt: new Date() },
       });
-    }
 
-    await tx.user.update({
-      where: { id: viewer.id },
-      data: { deletedAt: new Date() },
-    });
-
-    // Includes the session running this request, so the sign-out below finds nothing left to
-    // close and the LOGOUT event does not compete with SESSION_REVOKED for the same session.
-    await revokeUserSessions(tx, {
-      userId: viewer.id,
-      reason: AUDIT_REASONS.accountClosed,
-      context: await getRequestContext(),
-    });
-  });
+      // Includes the session running this request, so the sign-out below finds nothing left to
+      // close and the LOGOUT event does not compete with SESSION_REVOKED for the same session.
+      await revokeUserSessions(tx, {
+        userId: viewer.id,
+        reason: AUDIT_REASONS.accountClosed,
+        context,
+      });
+    },
+    { timeout: 15_000 },
+  );
 
   await signOut({ redirect: false });
 

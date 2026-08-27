@@ -96,6 +96,24 @@ export async function reviewVerificationAction(
     return actionError("That request has already been decided.");
   }
 
+  if (decision === "APPROVE") {
+    const alreadyVerified = await prisma.verificationRequest.findFirst({
+      where: {
+        status: "VERIFIED",
+        sscRoll: request.sscRoll,
+        sscRegistration: request.sscRegistration,
+        id: { not: request.id },
+        user: { deletedAt: null },
+      },
+      select: { id: true },
+    });
+    if (alreadyVerified) {
+      return actionError(
+        "These SSC details are already approved on another account. Investigate before approving this one.",
+      );
+    }
+  }
+
   const nextStatus = decision === "APPROVE" ? "VERIFIED" : "REJECTED";
 
   try {
@@ -186,6 +204,8 @@ export async function bulkApproveAction(
       id: true,
       userId: true,
       fullNameOnCert: true,
+      sscRoll: true,
+      sscRegistration: true,
       user: { select: { email: true } },
     },
   });
@@ -194,6 +214,18 @@ export async function bulkApproveAction(
   const notify: Array<{ email: string; name: string }> = [];
 
   for (const request of requests) {
+    const alreadyVerified = await prisma.verificationRequest.findFirst({
+      where: {
+        status: "VERIFIED",
+        sscRoll: request.sscRoll,
+        sscRegistration: request.sscRegistration,
+        id: { not: request.id },
+        user: { deletedAt: null },
+      },
+      select: { id: true },
+    });
+    if (alreadyVerified) continue;
+
     try {
       await prisma.$transaction(async (tx) => {
         await tx.verificationRequest.update({

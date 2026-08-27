@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SscForm } from "@/components/verification/ssc-form";
+import { StatusRefresh } from "@/components/verification/status-refresh";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getOwnVerificationState } from "@/lib/dal/verification";
-import { requireViewer } from "@/lib/dal/session";
+import { requireViewerWithFreshStatus } from "@/lib/dal/session";
+import { homeForStatus } from "@/lib/auth-routes";
 
 export const metadata: Metadata = {
   title: "Confirm you studied here",
@@ -20,8 +22,15 @@ export const metadata: Metadata = {
  * new claim.
  */
 export default async function OnboardingPage() {
-  const viewer = await requireViewer();
-  if (viewer.isVerified) redirect("/directory");
+  const viewer = await requireViewerWithFreshStatus();
+  if (viewer.isVerified) {
+    redirect(
+      homeForStatus("VERIFIED", {
+        profileComplete: viewer.profileComplete,
+        isAdmin: viewer.isAdmin,
+      }),
+    );
+  }
   if (viewer.status === "PENDING" || viewer.status === "REJECTED") {
     redirect("/verification-status");
   }
@@ -30,6 +39,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+      <StatusRefresh />
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">One more step</CardTitle>

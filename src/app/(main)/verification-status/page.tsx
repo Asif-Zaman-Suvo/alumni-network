@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import { formatDistanceToNow } from "date-fns";
 import { ClockIcon, FileTextIcon, TriangleAlertIcon } from "lucide-react";
+import { redirect } from "next/navigation";
 import { SscForm } from "@/components/verification/ssc-form";
+import { StatusRefresh } from "@/components/verification/status-refresh";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getOwnVerificationState } from "@/lib/dal/verification";
 import { requireViewerWithFreshStatus } from "@/lib/dal/session";
+import { homeForStatus } from "@/lib/auth-routes";
 
 export const metadata: Metadata = {
   title: "Verification status",
@@ -15,15 +18,23 @@ export const metadata: Metadata = {
 };
 
 export default async function VerificationStatusPage() {
-  // Sync JWT with DB so an admin approval in another session is visible on refresh.
   const viewer = await requireViewerWithFreshStatus();
-  // VERIFIED / UNVERIFIED already redirected inside requireViewerWithFreshStatus.
+  if (viewer.status === "UNVERIFIED") redirect("/onboarding");
+  if (viewer.isVerified) {
+    redirect(
+      homeForStatus("VERIFIED", {
+        profileComplete: viewer.profileComplete,
+        isAdmin: viewer.isAdmin,
+      }),
+    );
+  }
 
   const state = await getOwnVerificationState();
   const latest = state.latest;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-12 sm:px-6">
+      <StatusRefresh />
       {state.status === "PENDING" ? (
         <Card>
           <CardHeader>

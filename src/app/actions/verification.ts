@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { signOut } from "@/auth";
+import { signOut, unstable_update } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
 import { getViewer } from "@/lib/dal/session";
 import { MAX_SUBMISSION_ATTEMPTS } from "@/lib/dal/verification";
@@ -12,7 +12,6 @@ import {
   deleteOAuthStubUser,
   findBlockingPendingOwnerBySsc,
   findVerifiedAlumniBySsc,
-  maskEmail,
 } from "@/lib/oauth-link";
 import { prisma } from "@/lib/prisma";
 import { isUniqueViolation } from "@/lib/prisma-errors";
@@ -24,11 +23,11 @@ import { sscSubmissionSchema } from "@/lib/validation";
 export type VerificationSubmitData = {
   redirectTo?: string;
   /**
-   * Case 1: SSC matches a VERIFIED alumni. Full email is never returned — only a mask.
-   * The OAuth stub has been deleted and the session cleared.
+   * Case 1: SSC matches a VERIFIED alumni. The OAuth stub has been deleted and the
+   * session cleared; login shows this address so they can sign in to the original account.
    */
   existingAccount?: {
-    maskedEmail: string;
+    email: string;
     hasPassword: boolean;
   };
 };
@@ -81,7 +80,7 @@ export async function submitVerificationAction(
   }
 
   const { fullNameOnCert, gender, sscRoll, sscRegistration, passingYear } = parsed.data;
-  const identity = { sscRoll, sscRegistration, passingYear };
+  const identity = { sscRoll, sscRegistration, passingYear, fullNameOnCert };
 
   const [verifiedMatch, blockingOwnerId] = await Promise.all([
     findVerifiedAlumniBySsc(identity),
@@ -102,12 +101,12 @@ export async function submitVerificationAction(
     // Only delete Auth.js OAuth stubs (UNVERIFIED). REJECTED resubmits must not wipe the user.
     if (viewer.status === "UNVERIFIED") {
       // /onboarding requires a session, so conflict UI cannot render there after signOut.
-      // Pass masked email on the redirect — login is a public RSC and must not mutate cookies.
+      // Pass the registered email on the redirect — login is a public RSC and must not mutate cookies.
       await deleteOAuthStubUser(viewer.id);
       await signOut({ redirect: false });
 
       const params = new URLSearchParams({
-        existingEmail: maskEmail(verifiedMatch.email),
+        existingEmail: verifiedMatch.email,
         hasPassword: verifiedMatch.hasPassword ? "1" : "0",
       });
       redirect(`/login?${params.toString()}`);
@@ -116,6 +115,7 @@ export async function submitVerificationAction(
     return actionError(
       "An alumni account with these SSC details already exists. Sign in with that account instead.",
       {
+        fullNameOnCert: ["These SSC details are already registered."],
         sscRoll: ["These SSC details are already registered."],
         sscRegistration: ["These SSC details are already registered."],
       },
@@ -173,6 +173,7 @@ export async function submitVerificationAction(
       return actionError(
         "These SSC details are already registered or under review for another account.",
         {
+          fullNameOnCert: ["These SSC details are already registered."],
           sscRoll: ["These SSC details are already registered."],
           sscRegistration: ["These SSC details are already registered."],
         },
@@ -182,6 +183,7 @@ export async function submitVerificationAction(
   }
 
   await sendVerificationReceived(viewer.email);
+  await unstable_update({});
 
   revalidatePath("/verification-status");
   revalidatePath("/onboarding");

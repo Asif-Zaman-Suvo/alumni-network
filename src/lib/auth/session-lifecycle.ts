@@ -178,8 +178,11 @@ export async function endSessionByLogout(
 /**
  * Revokes every live session for a user and records one SESSION_REVOKED per session.
  *
- * Accepts a transaction client so callers can revoke in the same transaction as the change that
- * justified it (suspension, password reset, account closure) — the two must not diverge.
+ * Set-based (like `expireDueSessions`): one UPDATE + one `createMany`, not three round trips
+ * per session. Callers nest this inside a short interactive transaction (account close,
+ * password reset); a per-row loop against remote Postgres blows the 5s default timeout.
+ *
+ * Accepts a transaction client so revoke stays atomic with the change that justified it.
  */
 export async function revokeUserSessions(
   client: PrismaLike,
@@ -197,22 +200,55 @@ export async function revokeUserSessions(
       status: AuthSessionStatus.ACTIVE,
       ...(input.exceptSessionId ? { id: { not: input.exceptSessionId } } : {}),
     },
-    select: { id: true },
+    select: {
+      id: true,
+      provider: true,
+      ipAddress: true,
+      userAgent: true,
+      user: { select: { id: true, email: true, role: true } },
+    },
   });
 
-  let revoked = 0;
-  for (const session of live) {
-    const outcome = await endSession(client, {
-      sessionId: session.id,
-      status: AuthSessionStatus.REVOKED,
-      action: AUTH_AUDIT_ACTIONS.sessionRevoked,
-      reason: input.reason,
-      context: input.context,
-    });
-    if (outcome === "ended") revoked += 1;
-  }
+  if (live.length === 0) return 0;
 
-  return revoked;
+  const ids = live.map((session) => session.id);
+
+  const transitioned = await client.$queryRaw<{ id: string }[]>(Prisma.sql`
+    UPDATE "AuthSession"
+       SET "status"      = ${AuthSessionStatus.REVOKED}::"AuthSessionStatus",
+           "endedAt"     = ${new Date()},
+           "endedReason" = ${input.reason}
+     WHERE "id" IN (${Prisma.join(ids)})
+       AND "status" = ${AuthSessionStatus.ACTIVE}::"AuthSessionStatus"
+    RETURNING "id"
+  `);
+
+  if (transitioned.length === 0) return 0;
+
+  const byId = new Map(live.map((session) => [session.id, session]));
+
+  await client.auditLog.createMany({
+    data: transitioned.flatMap(({ id }) => {
+      const session = byId.get(id);
+      if (!session) return [];
+      return [
+        {
+          action: AUTH_AUDIT_ACTIONS.sessionRevoked,
+          actorId: session.user.id,
+          actorEmail: session.user.email,
+          actorRole: session.user.role,
+          sessionId: id,
+          provider: session.provider,
+          reason: input.reason,
+          ipAddress: sanitiseIpAddress(input.context?.ipAddress ?? session.ipAddress),
+          userAgent: sanitiseUserAgent(input.context?.userAgent ?? session.userAgent),
+        },
+      ];
+    }),
+    skipDuplicates: true,
+  });
+
+  return transitioned.length;
 }
 
 /**
