@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
@@ -59,6 +58,11 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
   const [preview, setPreview] = React.useState<string | null>(null);
   const [avatarError, setAvatarError] = React.useState<string | undefined>();
   const [avatarRemoved, setAvatarRemoved] = React.useState(false);
+  const [bloodGroup, setBloodGroup] = React.useState(profile.bloodGroup ?? "");
+  const [departmentId, setDepartmentId] = React.useState(profile.departmentId ?? "");
+  const [collegeDepartment, setCollegeDepartment] = React.useState(profile.collegeDepartment ?? "");
+  const [countryCode, setCountryCode] = React.useState((profile.countryCode ?? "").trim());
+  const [visibility, setVisibility] = React.useState(profile.visibility);
   const { formRef, formAction, pending, formError, fieldError, fieldErrorSummary } =
     useActionForm(updateProfileAction);
   const displayedAvatarError = avatarError ?? fieldError("avatar");
@@ -193,7 +197,8 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
             <select
               id="bloodGroup"
               name="bloodGroup"
-              defaultValue={profile.bloodGroup ?? ""}
+              value={bloodGroup}
+              onChange={(event) => setBloodGroup(event.currentTarget.value)}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Prefer not to say</option>
@@ -262,7 +267,8 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
               <select
                 id="departmentId"
                 name="departmentId"
-                defaultValue={profile.departmentId ?? ""}
+                value={departmentId}
+                onChange={(event) => setDepartmentId(event.currentTarget.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Not specified</option>
@@ -302,7 +308,8 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
               <select
                 id="collegeDepartment"
                 name="collegeDepartment"
-                defaultValue={profile.collegeDepartment ?? ""}
+                value={collegeDepartment}
+                onChange={(event) => setCollegeDepartment(event.currentTarget.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">Not specified</option>
@@ -478,7 +485,8 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
             <select
               id="countryCode"
               name="countryCode"
-              defaultValue={profile.countryCode ?? ""}
+              value={countryCode}
+              onChange={(event) => setCountryCode(event.currentTarget.value)}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">Not specified</option>
@@ -501,17 +509,21 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <RadioGroup name="visibility" defaultValue={profile.visibility} className="gap-3">
+          <div className="grid gap-3">
             {VISIBILITY_OPTIONS.map((option) => (
               <Label
                 key={option.value}
                 htmlFor={`visibility-${option.value}`}
                 className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4 transition-colors hover:bg-accent/40 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
               >
-                <RadioGroupItem
+                <input
                   id={`visibility-${option.value}`}
+                  type="radio"
+                  name="visibility"
                   value={option.value}
-                  className="mt-0.5"
+                  checked={visibility === option.value}
+                  onChange={() => setVisibility(option.value)}
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
                 />
                 <span className="space-y-1">
                   <span className="flex items-center gap-2 font-medium">
@@ -524,7 +536,7 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
                 </span>
               </Label>
             ))}
-          </RadioGroup>
+          </div>
 
           <div className="space-y-3 rounded-lg border border-border p-4">
             <div className="flex items-start justify-between gap-4">

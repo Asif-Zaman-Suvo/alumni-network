@@ -357,6 +357,7 @@ export type EditableProfile = {
   showGender: boolean;
   gender: Gender | null;
   bloodGroup: BloodGroupValue | null;
+  updatedAt: Date;
 };
 
 export async function getOwnProfile(): Promise<EditableProfile | null> {
@@ -395,6 +396,7 @@ export async function getOwnProfile(): Promise<EditableProfile | null> {
       showGender: true,
       gender: true,
       bloodGroup: true,
+      updatedAt: true,
     },
   });
 }

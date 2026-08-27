@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { unstable_update } from "@/auth";
 import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
+import { parseProfileFormData } from "@/lib/profile-form-data";
 import { AUDIT_REASONS } from "@/lib/audit-events";
 import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecycle";
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
@@ -11,7 +12,6 @@ import { getViewer } from "@/lib/dal/session";
 import { prisma } from "@/lib/prisma";
 import { personalDataToXlsxBuffer } from "@/lib/personal-data-xlsx";
 import { removeAvatar, uploadAvatar } from "@/lib/storage";
-import { profileSchema } from "@/lib/validation";
 
 export async function updateProfileAction(formData: FormData): Promise<ActionResult> {
   const viewer = await getViewer();
@@ -20,16 +20,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     return actionError("Your account must be verified before you can publish a profile.");
   }
 
-  const raw = Object.fromEntries(formData);
-  const parsed = profileSchema.safeParse({
-    ...raw,
-    // Unchecked switches are absent from FormData entirely.
-    showEmail: formData.get("showEmail") === "on" || formData.get("showEmail") === "true",
-    showEmployer:
-      formData.get("showEmployer") === "on" || formData.get("showEmployer") === "true",
-    showGender: formData.get("showGender") === "on" || formData.get("showGender") === "true",
-  });
-
+  const parsed = parseProfileFormData(formData);
   if (!parsed.success) return fromZodError(parsed.error);
 
   const data = parsed.data;
@@ -86,7 +77,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       linkedInUrl: data.linkedInUrl ?? null,
       websiteUrl: data.websiteUrl ?? null,
       city: data.city ?? null,
-      countryCode: data.countryCode ?? null,
+      countryCode: data.countryCode?.trim() || null,
       collegeName: data.collegeName ?? null,
       collegeDepartment: data.collegeDepartment ?? null,
       collegeSession: data.collegeSession ?? null,

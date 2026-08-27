@@ -80,7 +80,12 @@ export default async function ProfileSettingsPage(props: {
         </Alert>
       ) : null}
 
-      <ProfileForm profile={profile} departments={departments} email={viewer.email} />
+      <ProfileForm
+        key={profile.updatedAt.toISOString()}
+        profile={profile}
+        departments={departments}
+        email={viewer.email}
+      />
 
       <LinkedAccountsCard
         linkedProviders={linkedAccounts.map((account) => account.provider)}

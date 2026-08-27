@@ -20,7 +20,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "test:unit": "node --import tsx --test src/lib/dal/__tests__/*.test.ts",
+    "test:unit": "node --import tsx --test src/lib/dal/__tests__/*.test.ts src/lib/__tests__/*.test.ts",
     "test:e2e": "playwright test",
     "prepare": "husky"
   },

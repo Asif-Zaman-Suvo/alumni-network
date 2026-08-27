@@ -144,8 +144,11 @@ Channel authorization does not trust the token alone. The RLS policy re-checks t
 | `CRON_SECRET`                           | Bearer secret for the session expiry cron (optional)                                                                   |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth (optional)                                                                                                |
 | `BREVO_API_KEY` / `EMAIL_FROM`          | Transactional email (optional). `EMAIL_FROM` must be a sender verified in Brevo.                                       |
+| `SEED_ADMIN_PASSWORD`                   | **Seed only.** Password for `alumnishksc@gmail.com`. Required by `npm run db:seed`. Never commit the value.            |
 
 `AUDIT_HASH_SECRET` is validated at startup, so a deployment without it fails outright rather than degrading. The Realtime and cron variables are optional: without them the audit page is a paginated history and expiry is enforced without being recorded.
+
+`npm run db:seed` creates the three SSC departments and one administrator (`alumnishksc@gmail.com`). It does not create dummy alumni. Set `SEED_ADMIN_PASSWORD` in `.env` first.
 
 ### Storage buckets
 
