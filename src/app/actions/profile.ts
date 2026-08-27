@@ -9,6 +9,7 @@ import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecy
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
 import { prisma } from "@/lib/prisma";
+import { personalDataToXlsxBuffer } from "@/lib/personal-data-xlsx";
 import { removeAvatar, uploadAvatar } from "@/lib/storage";
 import { profileSchema } from "@/lib/validation";
 
@@ -26,6 +27,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     showEmail: formData.get("showEmail") === "on" || formData.get("showEmail") === "true",
     showEmployer:
       formData.get("showEmployer") === "on" || formData.get("showEmployer") === "true",
+    showGender: formData.get("showGender") === "on" || formData.get("showGender") === "true",
   });
 
   if (!parsed.success) return fromZodError(parsed.error);
@@ -34,7 +36,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
 
   const existing = await prisma.profile.findUnique({
     where: { userId: viewer.id },
-    select: { id: true, slug: true, avatarUrl: true },
+    select: { id: true, slug: true, avatarUrl: true, gender: true },
   });
   if (!existing) return actionError("Profile not found.");
 
@@ -48,9 +50,16 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       await removeAvatar(existing.avatarUrl);
     }
     avatarUrl = upload.path;
+  } else if (formData.get("removeAvatar") === "1" && existing.avatarUrl) {
+    await removeAvatar(existing.avatarUrl);
+    avatarUrl = null;
   }
 
-  // Department is a lookup table, so reject unknown ids rather than silently nulling them.
+  if (!existing.gender && !data.gender) {
+    return actionError("Please correct the highlighted fields.", {
+      gender: ["Choose Male or Female"],
+    });
+  }
   if (data.departmentId) {
     const department = await prisma.department.findUnique({
       where: { id: data.departmentId },
@@ -73,7 +82,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       company: data.company ?? null,
       position: data.position ?? null,
       whatsappPhone: data.whatsappPhone,
-      facebookUrl: data.facebookUrl,
+      facebookUrl: data.facebookUrl ?? null,
       linkedInUrl: data.linkedInUrl ?? null,
       websiteUrl: data.websiteUrl ?? null,
       city: data.city ?? null,
@@ -88,11 +97,13 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
       visibility: data.visibility,
       showEmail: data.showEmail,
       showEmployer: data.showEmployer,
+      showGender: data.showGender,
+      ...(!existing.gender && data.gender ? { gender: data.gender } : {}),
       avatarUrl,
     },
   });
 
-  const profileComplete = Boolean(data.whatsappPhone?.trim() && data.facebookUrl?.trim());
+  const profileComplete = Boolean(data.whatsappPhone?.trim());
   await prisma.user.update({
     where: { id: viewer.id },
     data: { profileComplete },
@@ -112,7 +123,7 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
     undefined,
     profileComplete
       ? "Profile saved."
-      : "Profile saved. Add WhatsApp and Facebook to unlock the directory.",
+      : "Profile saved. Add a WhatsApp number to unlock the directory.",
   );
 }
 
@@ -150,6 +161,8 @@ export type PersonalDataExport = {
     visibility: string;
     showEmail: boolean;
     showEmployer: boolean;
+    showGender: boolean;
+    gender: string | null;
   } | null;
   verificationRequests: Array<{
     sscRoll: string;
@@ -164,7 +177,7 @@ export type PersonalDataExport = {
 };
 
 /** Subject-access export. Includes the caller's own SSC fields; never anyone else's. */
-export async function exportOwnDataAction(): Promise<ActionResult<PersonalDataExport>> {
+async function loadOwnDataExport(): Promise<ActionResult<PersonalDataExport>> {
   const viewer = await getViewer();
   if (!viewer) return actionError("Please sign in again.");
 
@@ -202,6 +215,8 @@ export async function exportOwnDataAction(): Promise<ActionResult<PersonalDataEx
           visibility: true,
           showEmail: true,
           showEmployer: true,
+          showGender: true,
+          gender: true,
         },
       },
       verifications: {
@@ -240,6 +255,25 @@ export async function exportOwnDataAction(): Promise<ActionResult<PersonalDataEx
   });
 }
 
+export async function exportOwnDataAction(): Promise<ActionResult<PersonalDataExport>> {
+  return loadOwnDataExport();
+}
+
+export async function exportOwnDataXlsxAction(): Promise<
+  ActionResult<{ filename: string; mimeType: string; base64: string }>
+> {
+  const result = await loadOwnDataExport();
+  if (!result.ok) return actionError(result.error);
+
+  const buffer = await personalDataToXlsxBuffer(result.data);
+  const date = new Date().toISOString().slice(0, 10);
+  return actionOk({
+    filename: `alumni-data-export-${date}.xlsx`,
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    base64: buffer.toString("base64"),
+  });
+}
+
 /**
  * Self-service deletion. The row is soft deleted so the audit trail survives, but every
  * field a directory could surface is cleared immediately.
@@ -269,6 +303,8 @@ export async function deleteOwnAccountAction(): Promise<ActionResult> {
           whatsappPhone: null,
           linkedInUrl: null,
           facebookUrl: null,
+          gender: null,
+          showGender: false,
           websiteUrl: null,
           city: null,
           countryCode: null,

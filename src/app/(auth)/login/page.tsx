@@ -5,6 +5,7 @@ import { isGoogleEnabled } from "@/auth.config";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 import { LoginForm } from "@/components/auth/login-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { homeForStatus } from "@/lib/auth-routes";
 import { getViewer } from "@/lib/dal/session";
@@ -43,8 +44,26 @@ function oauthErrorCopy(error: string | undefined): { title: string; body: strin
   }
 }
 
+/** Masked email from onboarding SSC conflict redirect — never a full address. */
+function existingSscFromSearch(params: {
+  existingEmail?: string;
+  hasPassword?: string;
+}): { maskedEmail: string; hasPassword: boolean } | null {
+  const maskedEmail = params.existingEmail?.trim();
+  if (!maskedEmail || !maskedEmail.includes("@") || maskedEmail.length > 254) return null;
+  return {
+    maskedEmail,
+    hasPassword: params.hasPassword === "1",
+  };
+}
+
 export default async function LoginPage(props: {
-  searchParams: Promise<{ callbackUrl?: string; error?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    error?: string;
+    existingEmail?: string;
+    hasPassword?: string;
+  }>;
 }) {
   // Next 16: searchParams is a Promise and must be awaited.
   const searchParams = await props.searchParams;
@@ -66,6 +85,7 @@ export default async function LoginPage(props: {
 
   const googleEnabled = isGoogleEnabled;
   const oauthError = oauthErrorCopy(searchParams.error);
+  const existingSscAccount = existingSscFromSearch(searchParams);
 
   return (
     <div className="space-y-6">
@@ -75,6 +95,34 @@ export default async function LoginPage(props: {
           Sign in to browse the alumni directory.
         </p>
       </div>
+
+      {existingSscAccount ? (
+        <div className="space-y-3">
+          <Alert variant="destructive">
+            <AlertTitle>Account already registered</AlertTitle>
+            <AlertDescription>
+              We found an existing account associated with this alumni record. Please sign in
+              using the email address below instead. Do not create another account.
+            </AlertDescription>
+          </Alert>
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm">
+            <p className="text-muted-foreground">Registered email</p>
+            <p className="mt-1 font-medium tracking-wide">{existingSscAccount.maskedEmail}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              The full address is hidden for privacy. Use the account you originally registered
+              with
+              {existingSscAccount.hasPassword
+                ? " (email and password, or Google if you linked it from settings)."
+                : " (Continue with Google if that is how you registered)."}
+            </p>
+          </div>
+          {existingSscAccount.hasPassword ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/forgot-password">Forgot password?</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {oauthError ? (
         <Alert variant="destructive">

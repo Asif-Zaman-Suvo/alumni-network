@@ -94,7 +94,7 @@ export function sendVerificationApproved(to: string, name: string) {
     heading: `Welcome to the network, ${name}`,
     body: [
       "An administrator has confirmed your SSC details.",
-      "Before you can browse the directory, complete your profile with WhatsApp and Facebook (required), plus college/university details.",
+      "Before you can browse the directory, complete your profile with a WhatsApp number (required), plus college/university details.",
     ],
     action: {
       label: "Complete your profile",

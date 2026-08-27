@@ -26,9 +26,9 @@ export function RegisterOptions({ googleEnabled }: RegisterOptionsProps) {
       <div className="space-y-3">
         <OAuthButtons />
         <p className="text-xs text-muted-foreground">
-          Fastest path. On the next screen you only enter SSC roll, registration number and
-          passing year. Name and photo come from Google. If you already have an approved
-          alumni account, those SSC details link this login to it.
+          Fastest path. On the next screen you enter SSC details and gender. Name and photo
+          come from Google. If you already have an approved alumni account, those SSC details
+          link this login to it.
         </p>
       </div>
 
@@ -44,8 +44,8 @@ export function RegisterOptions({ googleEnabled }: RegisterOptionsProps) {
           <div className="space-y-1">
             <p className="text-sm font-medium">Sign up with email</p>
             <p className="text-xs text-muted-foreground">
-              Use this only if you cannot use Google. You will enter name, email, password and
-              SSC details here — there is no separate onboarding step.
+              Use this only if you cannot use Google. You will enter name, email, gender,
+              password and SSC details here — there is no separate onboarding step.
             </p>
           </div>
           <RegisterForm />

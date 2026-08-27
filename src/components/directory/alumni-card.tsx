@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn, initialsOf } from "@/lib/utils";
 import { countryName } from "@/lib/countries";
+import { genderLabel } from "@/lib/gender";
 import type { DirectoryEntry } from "@/lib/dal/profiles";
 
 export function AlumniCard({
@@ -102,6 +103,9 @@ export function AlumniCard({
             ) : null}
             {entry.departmentName ? (
               <Badge variant="outline">{entry.departmentName}</Badge>
+            ) : null}
+            {entry.gender ? (
+              <Badge variant="outline">{genderLabel(entry.gender)}</Badge>
             ) : null}
           </div>
         </CardContent>

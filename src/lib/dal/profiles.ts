@@ -8,7 +8,7 @@ import { getViewer, type Viewer } from "@/lib/dal/session";
 import { EDUCATION_GROUPS } from "@/lib/education-groups";
 import { consumeMemoryRateLimit } from "@/lib/memory-rate-limit";
 import { RATE_LIMITS } from "@/lib/rate-limit";
-import type { Visibility } from "@prisma/client";
+import type { Gender, Visibility } from "@prisma/client";
 
 /**
  * The only sanctioned read path for profile data.
@@ -31,6 +31,7 @@ export type DirectoryEntry = {
   position: string | null;
   city: string | null;
   countryCode: string | null;
+  gender: Gender | null;
 };
 
 export type DirectorySort = "relevance" | "name" | "recent" | "year";
@@ -169,6 +170,7 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
       CASE WHEN p."showEmployer" THEN p."position" ELSE NULL END AS "position",
       p."city",
       p."countryCode",
+      CASE WHEN p."showGender" THEN p."gender"::text ELSE NULL END AS "gender",
       d."name" AS "departmentName",
       COUNT(*) OVER()::int AS "total"
     FROM "Profile" p
@@ -180,7 +182,10 @@ export async function searchDirectory(query: DirectoryQuery): Promise<DirectoryR
   `;
 
   const total = rows[0]?.total ?? 0;
-  const entries: DirectoryEntry[] = rows.map(({ total: _total, ...entry }) => entry);
+  const entries: DirectoryEntry[] = rows.map(({ total: _total, gender, ...entry }) => ({
+    ...entry,
+    gender: gender === "MALE" || gender === "FEMALE" ? gender : null,
+  }));
 
   return {
     entries,
@@ -216,6 +221,7 @@ export type PublicProfile = {
   universityDepartment: string | null;
   universitySession: string | null;
   email: string | null;
+  gender: Gender | null;
   visibility: Visibility;
   isOwnProfile: boolean;
 };
@@ -255,6 +261,8 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
       visibility: true,
       showEmail: true,
       showEmployer: true,
+      showGender: true,
+      gender: true,
       department: { select: { name: true } },
       user: { select: { id: true, email: true, status: true, deletedAt: true } },
     },
@@ -275,6 +283,7 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
   // Contact channels only for verified alumni (and the owner).
   const showContact = Boolean(viewer?.isVerified) || access.isOwnProfile;
   const showEmail = (profile.showEmail && Boolean(viewer?.isVerified)) || access.isOwnProfile;
+  const showGender = profile.showGender || access.isOwnProfile;
 
   return {
     slug: profile.slug,
@@ -301,6 +310,7 @@ export async function getProfileBySlug(slug: string): Promise<PublicProfile | nu
     universityDepartment: profile.universityDepartment,
     universitySession: profile.universitySession,
     email: showEmail ? profile.user.email : null,
+    gender: showGender ? profile.gender : null,
     visibility: profile.visibility,
     isOwnProfile: access.isOwnProfile,
   };
@@ -333,6 +343,8 @@ export type EditableProfile = {
   visibility: Visibility;
   showEmail: boolean;
   showEmployer: boolean;
+  showGender: boolean;
+  gender: Gender | null;
 };
 
 export async function getOwnProfile(): Promise<EditableProfile | null> {
@@ -368,6 +380,8 @@ export async function getOwnProfile(): Promise<EditableProfile | null> {
       visibility: true,
       showEmail: true,
       showEmployer: true,
+      showGender: true,
+      gender: true,
     },
   });
 }

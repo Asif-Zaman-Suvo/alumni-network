@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import Image from "next/image";
-import { GlobeIcon, LockIcon, UsersIcon } from "lucide-react";
+import { GlobeIcon, LockIcon, UsersIcon, XIcon } from "lucide-react";
 import { updateProfileAction } from "@/app/actions/profile";
 import { Field } from "@/components/forms/field";
+import { GenderField } from "@/components/forms/gender-field";
 import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
 import type { EditableProfile } from "@/lib/dal/profiles";
 import { EDUCATION_GROUPS } from "@/lib/education-groups";
+import { genderLabel } from "@/lib/gender";
 import { EARLIEST_PASSING_YEAR, LATEST_PASSING_YEAR } from "@/lib/validation";
 import { initialsOf } from "@/lib/utils";
 
@@ -47,13 +49,41 @@ const VISIBILITY_OPTIONS = [
   },
 ] as const;
 
+/** Must match `MAX_AVATAR_BYTES` in `src/lib/storage.ts`. Kept here so the client never imports that module. */
+const MAX_AVATAR_BYTES = 100 * 1024;
+const AVATAR_TOO_LARGE = "Image must be 100 KB or smaller.";
+
 export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
+  const [avatarError, setAvatarError] = React.useState<string | undefined>();
+  const [avatarRemoved, setAvatarRemoved] = React.useState(false);
   const { formRef, formAction, pending, formError, fieldError, fieldErrorSummary } =
     useActionForm(updateProfileAction);
+  const displayedAvatarError = avatarError ?? fieldError("avatar");
+  const showingPhoto = Boolean(preview || (profile.avatarUrl && !avatarRemoved));
+
+  function clearAvatarPreview() {
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  }
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-6">
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-6"
+      onSubmit={(event) => {
+        const input = event.currentTarget.elements.namedItem("avatar");
+        const file = input instanceof HTMLInputElement ? input.files?.[0] : undefined;
+        if (file && file.size > MAX_AVATAR_BYTES) {
+          event.preventDefault();
+          setAvatarError(AVATAR_TOO_LARGE);
+        }
+      }}
+    >
       {formError || fieldErrorSummary ? (
         <Alert variant="destructive">
           <AlertDescription>{formError ?? fieldErrorSummary}</AlertDescription>
@@ -67,38 +97,74 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex items-center gap-4">
-            <span className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground">
-              {preview ? (
-                <Image src={preview} alt="" fill sizes="64px" className="object-cover" />
-              ) : profile.avatarUrl ? (
-                <Image
-                  src={profile.avatarUrl}
-                  alt=""
-                  fill
-                  sizes="64px"
-                  className="object-cover"
-                />
-              ) : (
-                initialsOf(profile.displayName)
-              )}
-            </span>
+            <div className="relative size-16 shrink-0">
+              <span className="relative flex size-16 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground">
+                {preview ? (
+                  <Image src={preview} alt="" fill sizes="64px" className="object-cover" />
+                ) : profile.avatarUrl && !avatarRemoved ? (
+                  <Image
+                    src={profile.avatarUrl}
+                    alt=""
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                  />
+                ) : (
+                  initialsOf(profile.displayName)
+                )}
+              </span>
+              {showingPhoto ? (
+                <button
+                  type="button"
+                  aria-label="Remove photo"
+                  className="absolute -right-1 -top-1 z-10 flex size-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:bg-destructive hover:text-destructive-foreground"
+                  onClick={() => {
+                    if (avatarInputRef.current) avatarInputRef.current.value = "";
+                    clearAvatarPreview();
+                    setAvatarError(undefined);
+                    setAvatarRemoved(true);
+                  }}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              ) : null}
+              {avatarRemoved ? <input type="hidden" name="removeAvatar" value="1" /> : null}
+            </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="avatar">Profile photo</Label>
               <Input
+                ref={avatarInputRef}
                 id="avatar"
                 name="avatar"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="max-w-72"
                 onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  setPreview(file ? URL.createObjectURL(file) : null);
+                  const input = event.currentTarget;
+                  const file = input.files?.[0];
+                  if (!file) {
+                    clearAvatarPreview();
+                    setAvatarError(undefined);
+                    return;
+                  }
+                  if (file.size > MAX_AVATAR_BYTES) {
+                    input.value = "";
+                    clearAvatarPreview();
+                    setAvatarError(AVATAR_TOO_LARGE);
+                    return;
+                  }
+                  setAvatarRemoved(false);
+                  setAvatarError(undefined);
+                  setPreview((current) => {
+                    if (current) URL.revokeObjectURL(current);
+                    return URL.createObjectURL(file);
+                  });
                 }}
               />
-              <p className="text-xs text-muted-foreground">Optional. JPG, PNG or WebP, up to 5 MB.</p>
-              {fieldError("avatar") ? (
-                <p className="text-xs font-medium text-destructive">{fieldError("avatar")}</p>
+              <p className="text-xs text-muted-foreground">Optional. JPG, PNG or WebP, up to 100 KB.</p>
+              {displayedAvatarError ? (
+                <p className="text-xs font-medium text-destructive">{displayedAvatarError}</p>
               ) : null}
             </div>
           </div>
@@ -111,6 +177,16 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
               required
             />
           </Field>
+
+          {profile.gender ? (
+            <div className="space-y-1.5">
+              <Label>Gender</Label>
+              <p className="text-sm">{genderLabel(profile.gender)}</p>
+              <p className="text-xs text-muted-foreground">Set at signup and cannot be changed.</p>
+            </div>
+          ) : (
+            <GenderField error={fieldError("gender")} />
+          )}
 
           <Field
             name="headline"
@@ -300,7 +376,7 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
         <CardHeader>
           <CardTitle className="text-base">Contact & social</CardTitle>
           <CardDescription>
-            WhatsApp number and Facebook profile are required before you can use the directory.
+            WhatsApp is required before you can use the directory. Facebook is optional.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -326,7 +402,6 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
             name="facebookUrl"
             label="Facebook profile"
             error={fieldError("facebookUrl")}
-            required
             className="sm:col-span-2"
           >
             <Input
@@ -334,7 +409,6 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
               name="facebookUrl"
               type="url"
               defaultValue={profile.facebookUrl ?? ""}
-              required
               placeholder="https://www.facebook.com/..."
             />
           </Field>
@@ -458,6 +532,17 @@ export function ProfileForm({ profile, departments, email }: ProfileFormProps) {
                 name="showEmployer"
                 defaultChecked={profile.showEmployer}
               />
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="showGender">Show my gender</Label>
+                <p className="text-xs text-muted-foreground">
+                  Off by default. When on, Male or Female appears on your profile and directory
+                  card.
+                </p>
+              </div>
+              <Switch id="showGender" name="showGender" defaultChecked={profile.showGender} />
             </div>
           </div>
         </CardContent>

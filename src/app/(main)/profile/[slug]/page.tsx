@@ -12,6 +12,7 @@ import {
   MapPinIcon,
   MessageCircleIcon,
   PencilIcon,
+  UserIcon,
   UsersIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { countryName } from "@/lib/countries";
+import { genderLabel } from "@/lib/gender";
 import { getProfileBySlug, type PublicProfile } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
 import { initialsOf } from "@/lib/utils";
@@ -64,6 +66,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     profile.departmentName ? { icon: GraduationCapIcon, label: profile.departmentName } : null,
     role ? { icon: BriefcaseIcon, label: role } : null,
     location ? { icon: MapPinIcon, label: location } : null,
+    profile.gender ? { icon: UserIcon, label: genderLabel(profile.gender) } : null,
   ].filter((fact): fact is { icon: typeof GraduationCapIcon; label: string } => fact !== null);
 
   const educationRows = buildEducationRows(profile);

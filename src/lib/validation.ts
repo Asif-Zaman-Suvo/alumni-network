@@ -56,6 +56,7 @@ export const registerSchema = z.object({
   fullName,
   email,
   password,
+  gender: z.enum(["MALE", "FEMALE"]),
   sscRoll,
   sscRegistration,
   passingYear,
@@ -64,6 +65,7 @@ export const registerSchema = z.object({
 /** Google OAuth users skip the register form, so they submit SSC details on their own. */
 export const sscSubmissionSchema = z.object({
   fullNameOnCert: fullName,
+  gender: z.enum(["MALE", "FEMALE"]),
   sscRoll,
   sscRegistration,
   passingYear,
@@ -110,22 +112,6 @@ const optionalUrl = z
     { message: "Enter a full URL starting with https://" },
   );
 
-const requiredUrl = z
-  .string()
-  .trim()
-  .min(1, "This link is required")
-  .refine(
-    (value) => {
-      try {
-        const parsed = new URL(value);
-        return parsed.protocol === "https:" || parsed.protocol === "http:";
-      } catch {
-        return false;
-      }
-    },
-    { message: "Enter a full URL starting with https://" },
-  );
-
 /** BD / international WhatsApp numbers: optional +, digits, spaces, dashes. */
 const whatsappPhone = z
   .string()
@@ -154,7 +140,7 @@ export const profileSchema = z.object({
   company: optionalText(120),
   position: optionalText(120),
   whatsappPhone,
-  facebookUrl: requiredUrl,
+  facebookUrl: optionalUrl,
   linkedInUrl: optionalUrl,
   websiteUrl: optionalUrl,
   city: optionalText(80),
@@ -184,6 +170,8 @@ export const profileSchema = z.object({
   visibility: z.enum(["PUBLIC", "MEMBERS_ONLY", "PRIVATE"]),
   showEmail: z.coerce.boolean(),
   showEmployer: z.coerce.boolean(),
+  showGender: z.coerce.boolean(),
+  gender: z.enum(["MALE", "FEMALE"]).optional(),
 });
 
 export const reviewDecisionSchema = z

@@ -47,7 +47,7 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
   const parsed = registerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return fromZodError(parsed.error);
 
-  const { email, password, fullName, sscRoll, sscRegistration, passingYear } = parsed.data;
+  const { email, password, fullName, gender, sscRoll, sscRegistration, passingYear } = parsed.data;
 
   const limit = await consumeRateLimit({
     bucket: `register:${email}`,
@@ -103,6 +103,7 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
         userId: user.id,
         displayName: fullName,
         graduationYear: passingYear,
+        gender,
       });
 
       await tx.verificationRequest.create({

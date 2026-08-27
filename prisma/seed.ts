@@ -4,7 +4,7 @@
  *
  * Run with: npm run db:seed
  */
-import { PrismaClient, Visibility, type Prisma } from "@prisma/client";
+import { Gender, PrismaClient, Visibility, type Prisma } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -142,6 +142,7 @@ async function seedAdmin(passwordHash: string) {
           visibility: Visibility.PRIVATE,
           whatsappPhone: "+8801700000000",
           facebookUrl: "https://www.facebook.com/shksc.admin",
+          gender: Gender.MALE,
         },
       },
     },
@@ -152,8 +153,6 @@ async function seedAdmin(passwordHash: string) {
     where: { id: admin.id },
     data: { profileComplete: true, role: "ADMIN", status: "VERIFIED" },
   });
-
-  console.log(`  admin: admin@school.test / password: password123`);
   return admin;
 }
 
@@ -202,6 +201,8 @@ function buildProfile(index: number, departmentIds: string[]): SeedProfile {
       visibility: pick(VISIBILITIES),
       showEmail: random() < 0.3,
       showEmployer: random() < 0.85,
+      gender: index % 2 === 0 ? Gender.MALE : Gender.FEMALE,
+      showGender: random() < 0.4,
     },
   };
 }

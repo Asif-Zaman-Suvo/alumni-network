@@ -50,6 +50,11 @@ enum Visibility {
   PRIVATE
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 model User {
   id              String     @id @default(cuid())
   email           String     @unique
@@ -57,7 +62,7 @@ model User {
   passwordHash    String?
   role            Role       @default(ALUMNI)
   status          UserStatus @default(UNVERIFIED)
-  /// False until WhatsApp phone + Facebook URL are saved (required after admin approval).
+  /// False until WhatsApp phone is saved (required after admin approval).
   profileComplete Boolean    @default(false)
   deletedAt       DateTime?
   createdAt       DateTime   @default(now())
@@ -122,6 +127,9 @@ model Profile {
   headline       String?
   bio            String?
   avatarUrl      String?
+  gender         Gender?
+  /// When true, directory and public profile may show gender.
+  showGender     Boolean    @default(false)
 
   graduationYear Int?
   degree         String?

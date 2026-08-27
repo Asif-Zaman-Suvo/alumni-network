@@ -9,6 +9,7 @@ type ProfileCreateClient = {
         displayName: string;
         avatarUrl?: string | null;
         graduationYear?: number | null;
+        gender?: "MALE" | "FEMALE";
       };
     }): Promise<unknown>;
     findMany(args: {
@@ -42,6 +43,7 @@ export async function createProfileWithUniqueSlug(
     displayName: string;
     avatarUrl?: string | null;
     graduationYear?: number | null;
+    gender?: "MALE" | "FEMALE";
   },
 ): Promise<void> {
   const base = slugify(data.displayName) || "alum";
@@ -71,6 +73,7 @@ export async function createProfileWithUniqueSlug(
       ...(data.graduationYear !== undefined
         ? { graduationYear: data.graduationYear }
         : {}),
+      ...(data.gender !== undefined ? { gender: data.gender } : {}),
     },
   });
 }

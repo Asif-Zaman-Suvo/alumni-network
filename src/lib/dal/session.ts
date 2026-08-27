@@ -112,8 +112,8 @@ export async function requireVerifiedViewer(): Promise<Viewer> {
 }
 
 /**
- * Directory + member data require an approved account AND required contact fields
- * (WhatsApp + Facebook). Administrators bypass the profile gate.
+ * Directory + member data require an approved account AND a WhatsApp number.
+ * Administrators bypass the profile gate.
  */
 export async function requireDirectoryAccess(): Promise<Viewer> {
   const viewer = await requireVerifiedViewer();

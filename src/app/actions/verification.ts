@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
 import { getViewer } from "@/lib/dal/session";
@@ -79,7 +80,7 @@ export async function submitVerificationAction(
     );
   }
 
-  const { fullNameOnCert, sscRoll, sscRegistration, passingYear } = parsed.data;
+  const { fullNameOnCert, gender, sscRoll, sscRegistration, passingYear } = parsed.data;
   const identity = { sscRoll, sscRegistration, passingYear };
 
   const [verifiedMatch, blockingOwnerId] = await Promise.all([
@@ -100,22 +101,16 @@ export async function submitVerificationAction(
   if (decision.kind === "block_existing" && verifiedMatch) {
     // Only delete Auth.js OAuth stubs (UNVERIFIED). REJECTED resubmits must not wipe the user.
     if (viewer.status === "UNVERIFIED") {
+      // /onboarding requires a session, so conflict UI cannot render there after signOut.
+      // Pass masked email on the redirect — login is a public RSC and must not mutate cookies.
       await deleteOAuthStubUser(viewer.id);
       await signOut({ redirect: false });
 
-      revalidatePath("/onboarding");
-      revalidatePath("/login");
-
-      return actionError(
-        "We found an existing account associated with this alumni record. Please sign in using the registered email instead.",
-        undefined,
-        {
-          existingAccount: {
-            maskedEmail: maskEmail(verifiedMatch.email),
-            hasPassword: verifiedMatch.hasPassword,
-          },
-        },
-      );
+      const params = new URLSearchParams({
+        existingEmail: maskEmail(verifiedMatch.email),
+        hasPassword: verifiedMatch.hasPassword ? "1" : "0",
+      });
+      redirect(`/login?${params.toString()}`);
     }
 
     return actionError(
@@ -164,6 +159,12 @@ export async function submitVerificationAction(
           userId: viewer.id,
           displayName: fullNameOnCert,
           graduationYear: passingYear,
+          gender,
+        });
+      } else {
+        await tx.profile.update({
+          where: { id: profile.id },
+          data: { gender, graduationYear: passingYear },
         });
       }
     });

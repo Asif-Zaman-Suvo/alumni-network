@@ -2,6 +2,7 @@
 
 import { registerAction } from "@/app/actions/auth";
 import { Field } from "@/components/forms/field";
+import { GenderField } from "@/components/forms/gender-field";
 import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ export function RegisterForm() {
             placeholder="you@example.com"
           />
         </Field>
+
+        <GenderField error={fieldError("gender")} />
 
         <Field
           name="password"

@@ -8,6 +8,7 @@ import {
   type VerificationSubmitData,
 } from "@/app/actions/verification";
 import { Field } from "@/components/forms/field";
+import { GenderField } from "@/components/forms/gender-field";
 import { useActionForm } from "@/components/forms/use-action-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,12 +20,18 @@ type SscFormProps = {
   attemptsRemaining: number;
 };
 
+/** Must match `MAX_UPLOAD_BYTES` in `src/lib/storage.ts`. Kept here so the client never imports that module. */
+const MAX_CERTIFICATE_BYTES = 1 * 1024 * 1024;
+const CERTIFICATE_TOO_LARGE = "File must be 1 MB or smaller.";
+
 export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
   const [fileName, setFileName] = React.useState<string | null>(null);
+  const [documentError, setDocumentError] = React.useState<string | undefined>();
   const { formRef, formAction, pending, formError, fieldError, result } = useActionForm(
     submitVerificationAction,
     { successToast: true },
   );
+  const displayedDocumentError = documentError ?? fieldError("document");
 
   const existingAccount =
     result && !result.ok
@@ -69,7 +76,19 @@ export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
   }
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-5">
+    <form
+      ref={formRef}
+      action={formAction}
+      className="space-y-5"
+      onSubmit={(event) => {
+        const input = event.currentTarget.elements.namedItem("document");
+        const file = input instanceof HTMLInputElement ? input.files?.[0] : undefined;
+        if (file && file.size > MAX_CERTIFICATE_BYTES) {
+          event.preventDefault();
+          setDocumentError(CERTIFICATE_TOO_LARGE);
+        }
+      }}
+    >
       {formError ? (
         <Alert variant="destructive">
           <AlertDescription>{formError}</AlertDescription>
@@ -90,6 +109,8 @@ export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
           required
         />
       </Field>
+
+      <GenderField error={fieldError("gender")} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field name="sscRoll" label="SSC roll number" error={fieldError("sscRoll")} required>
@@ -134,8 +155,8 @@ export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
       <Field
         name="document"
         label="Marksheet or certificate"
-        error={fieldError("document")}
-        hint="Strongly recommended. Without it, a reviewer has nothing to check your numbers against and your request will take longer. JPG, PNG, WebP or PDF, up to 5 MB."
+        error={displayedDocumentError}
+        hint="Strongly recommended. Without it, a reviewer has nothing to check your numbers against and your request will take longer. JPG, PNG, WebP or PDF, up to 1 MB."
       >
         <label
           htmlFor="document"
@@ -151,7 +172,23 @@ export function SscForm({ defaultName, attemptsRemaining }: SscFormProps) {
             type="file"
             accept="image/jpeg,image/png,image/webp,application/pdf"
             className="sr-only"
-            onChange={(event) => setFileName(event.target.files?.[0]?.name ?? null)}
+            onChange={(event) => {
+              const input = event.currentTarget;
+              const file = input.files?.[0];
+              if (!file) {
+                setFileName(null);
+                setDocumentError(undefined);
+                return;
+              }
+              if (file.size > MAX_CERTIFICATE_BYTES) {
+                input.value = "";
+                setFileName(null);
+                setDocumentError(CERTIFICATE_TOO_LARGE);
+                return;
+              }
+              setDocumentError(undefined);
+              setFileName(file.name);
+            }}
           />
         </label>
       </Field>

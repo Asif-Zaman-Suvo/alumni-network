@@ -18,7 +18,8 @@ const supabase = createClient(
 export const CERTIFICATE_BUCKET = serverEnv.SUPABASE_CERTIFICATE_BUCKET;
 export const AVATAR_BUCKET = serverEnv.SUPABASE_AVATAR_BUCKET;
 
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 1 * 1024 * 1024;
+export const MAX_AVATAR_BYTES = 100 * 1024;
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export const ALLOWED_DOCUMENT_TYPES = [...ALLOWED_IMAGE_TYPES, "application/pdf"] as const;
 
@@ -44,7 +45,7 @@ export async function uploadCertificate(
   file: File,
 ): Promise<UploadResult> {
   if (file.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, error: "File must be 5 MB or smaller." };
+    return { ok: false, error: "File must be 1 MB or smaller." };
   }
   if (!ALLOWED_DOCUMENT_TYPES.includes(file.type as (typeof ALLOWED_DOCUMENT_TYPES)[number])) {
     return { ok: false, error: "Upload a JPG, PNG, WebP or PDF file." };
@@ -64,8 +65,8 @@ export async function uploadCertificate(
 }
 
 export async function uploadAvatar(userId: string, file: File): Promise<UploadResult> {
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return { ok: false, error: "Image must be 5 MB or smaller." };
+  if (file.size > MAX_AVATAR_BYTES) {
+    return { ok: false, error: "Image must be 100 KB or smaller." };
   }
   if (!ALLOWED_IMAGE_TYPES.includes(file.type as (typeof ALLOWED_IMAGE_TYPES)[number])) {
     return { ok: false, error: "Upload a JPG, PNG or WebP image." };

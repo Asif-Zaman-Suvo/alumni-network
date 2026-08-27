@@ -74,8 +74,8 @@ export default async function ProfileSettingsPage(props: {
         <Alert variant="warning">
           <AlertTitle>Complete your profile to unlock the directory</AlertTitle>
           <AlertDescription>
-            After approval you must add your WhatsApp number and Facebook profile link. College
-            and university details help batchmates find you.
+            After approval you must add your WhatsApp number. College and university details
+            help batchmates find you.
           </AlertDescription>
         </Alert>
       ) : null}
