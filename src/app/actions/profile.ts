@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { redirect } from "next/navigation";
 import { unstable_update } from "@/auth";
 import { signOut } from "@/auth";
 import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/action-result";
@@ -111,11 +112,13 @@ export async function updateProfileAction(formData: FormData): Promise<ActionRes
   revalidatePath("/directory");
   revalidateTag(DIRECTORY_FILTER_OPTIONS_TAG, "max");
 
+  if (profileComplete) {
+    redirect("/directory");
+  }
+
   return actionOk(
     undefined,
-    profileComplete
-      ? "Profile saved."
-      : "Profile saved. Add a WhatsApp number to unlock the directory.",
+    "Profile saved. Add a WhatsApp number to unlock the directory.",
   );
 }
 

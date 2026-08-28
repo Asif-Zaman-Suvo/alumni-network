@@ -32,7 +32,7 @@ export default async function ProfileSettingsPage(props: {
 
   if (!profile) notFound();
 
-  const needsComplete = searchParams.complete === "1" || !viewer.profileComplete;
+  const needsComplete = !viewer.profileComplete;
   const justLinked = searchParams.linked === "1" && !linkError;
 
   return (
