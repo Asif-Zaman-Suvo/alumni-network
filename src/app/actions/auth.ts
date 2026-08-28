@@ -28,6 +28,7 @@ import {
   findVerifiedAlumniBySsc,
 } from "@/lib/oauth-link";
 import { isUniqueViolation, uniqueViolationMatches } from "@/lib/prisma-errors";
+import { emailBlocksRegistration } from "@/lib/closed-account";
 import { createProfileWithUniqueSlug } from "@/lib/unique-slug";
 import {
   forgotPasswordSchema,
@@ -63,8 +64,11 @@ export async function registerAction(formData: FormData): Promise<ActionResult> 
     );
   }
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) {
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, deletedAt: true },
+  });
+  if (emailBlocksRegistration(existing)) {
     return actionError("An account with this email already exists.", {
       email: ["An account with this email already exists."],
     });

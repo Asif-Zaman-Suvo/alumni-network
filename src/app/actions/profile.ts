@@ -8,6 +8,7 @@ import { actionError, actionOk, fromZodError, type ActionResult } from "@/lib/ac
 import { parseProfileFormData } from "@/lib/profile-form-data";
 import { AUDIT_REASONS } from "@/lib/audit-events";
 import { getRequestContext, revokeUserSessions } from "@/lib/auth/session-lifecycle";
+import { releaseClosedAccountIdentity } from "@/lib/closed-account";
 import { DIRECTORY_FILTER_OPTIONS_TAG } from "@/lib/dal/profiles";
 import { getViewer } from "@/lib/dal/session";
 import { prisma } from "@/lib/prisma";
@@ -273,7 +274,8 @@ export async function exportOwnDataXlsxAction(): Promise<
 
 /**
  * Self-service deletion. The row is soft deleted so the audit trail survives, but every
- * field a directory could surface is cleared immediately.
+ * field a directory could surface is cleared immediately. Email, Google Account, and
+ * SSC uniqueness are released so the same person can register again.
  */
 export async function deleteOwnAccountAction(): Promise<ActionResult> {
   const viewer = await getViewer();
@@ -326,10 +328,7 @@ export async function deleteOwnAccountAction(): Promise<ActionResult> {
         });
       }
 
-      await tx.user.update({
-        where: { id: viewer.id },
-        data: { deletedAt: new Date() },
-      });
+      await releaseClosedAccountIdentity(tx, viewer.id);
 
       // Includes the session running this request, so the sign-out below finds nothing left to
       // close and the LOGOUT event does not compete with SESSION_REVOKED for the same session.

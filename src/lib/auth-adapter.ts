@@ -55,14 +55,15 @@ export function createAlumniAuthAdapter(): Adapter {
     async getUser(id) {
       const user = await prisma.user.findUnique({
         where: { id },
-        select: userWithProfileSelect,
+        select: { ...userWithProfileSelect, deletedAt: true },
       });
-      return user ? toAdapterUserFromRow(user) : null;
+      if (!user || user.deletedAt) return null;
+      return toAdapterUserFromRow(user);
     },
 
     async getUserByEmail(email) {
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const user = await prisma.user.findFirst({
+        where: { email, deletedAt: null },
         select: userWithProfileSelect,
       });
       return user ? toAdapterUserFromRow(user) : null;
@@ -74,10 +75,11 @@ export function createAlumniAuthAdapter(): Adapter {
           provider_providerAccountId: { provider, providerAccountId },
         },
         select: {
-          user: { select: userWithProfileSelect },
+          user: { select: { ...userWithProfileSelect, deletedAt: true } },
         },
       });
-      return account?.user ? toAdapterUserFromRow(account.user) : null;
+      if (!account?.user || account.user.deletedAt) return null;
+      return toAdapterUserFromRow(account.user);
     },
 
     async updateUser(data) {

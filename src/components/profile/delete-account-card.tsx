@@ -46,7 +46,7 @@ export function DeleteAccountCard() {
         <CardTitle className="text-base text-destructive">Close your account</CardTitle>
         <CardDescription>
           Your profile is removed from the directory immediately and every field is cleared.
-          The verification record is kept so the alumni office retains an audit trail.
+          You can register again with this email; SSC details will need a new review.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -60,8 +60,7 @@ export function DeleteAccountCard() {
             <DialogHeader>
               <DialogTitle>Close your account?</DialogTitle>
               <DialogDescription>
-                This cannot be undone from here. You would need an administrator to restore
-                access.
+                This cannot be undone. Sign in and register again if you want to come back.
               </DialogDescription>
             </DialogHeader>
 
