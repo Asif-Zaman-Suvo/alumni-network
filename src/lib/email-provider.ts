@@ -1,4 +1,5 @@
 import { serverEnv } from "@/env";
+import { parseSender, unquoteEnvValue } from "@/lib/email-sender";
 
 /**
  * Brevo Transactional Email API.
@@ -15,24 +16,15 @@ export type OutboundEmail = {
   devLink?: string;
 };
 
-type Sender = { name: string; email: string };
-
-function parseSender(from: string): Sender {
-  const angled = from.match(/^(.*?)\s*<([^>]+)>\s*$/);
-  if (angled?.[1] !== undefined && angled[2] !== undefined) {
-    const name = angled[1].trim();
-    return { name: name || "Alumni Network", email: angled[2].trim() };
-  }
-  return { name: "Alumni Network", email: from.trim() };
-}
-
 export async function sendOutboundEmail({
   to,
   subject,
   html,
   devLink,
 }: OutboundEmail): Promise<void> {
-  const apiKey = serverEnv.BREVO_API_KEY;
+  const apiKey = serverEnv.BREVO_API_KEY
+    ? unquoteEnvValue(serverEnv.BREVO_API_KEY)
+    : undefined;
   if (!apiKey) {
     console.info(
       `[email:dev] to=${to} subject="${subject}"${devLink ? ` link=${devLink}` : ""}`,
