@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Matches header mark: primary blue tile + white graduation cap -->
+  <rect width="32" height="32" rx="8" fill="#2563eb"/>
+  <g fill="none" stroke="#ffffff" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.5 14.25 16 8.5l10.5 5.75L16 20 5.5 14.25Z"/>
+    <path d="M10.25 16.75v4.25c0 1.4 2.55 2.75 5.75 2.75s5.75-1.35 5.75-2.75v-4.25"/>
+    <path d="M26.5 14.25V20"/>
+  </g>
+</svg>
