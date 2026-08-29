@@ -9,9 +9,9 @@ export function SiteFooter() {
             &copy; {new Date().getFullYear()} {clientEnv.NEXT_PUBLIC_SCHOOL_NAME} Alumni Network
           </p>
           <p>
-            Built by{" "}
-            <span className="font-medium text-foreground/80">Md Asifuzzaman Suvo</span>
-            <span className="text-muted-foreground/80"> · Batch 2013</span>
+            Designed &amp; Developed with ❤️ by{" "}
+            <span className="font-medium text-foreground/80">Md. Asifuzzaman Suvo</span>
+            <span className="text-muted-foreground/80"> · Alumni, Batch of 2013</span>
           </p>
         </div>
         <p>Alumni details are shared only with verified members.</p>
