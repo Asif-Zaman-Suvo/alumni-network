@@ -2,7 +2,7 @@
 
 Verified alumni networking platform for **Shamsul Hoque Khan School & College**.
 
-Alumni identity is defined by SSC credentials (roll, registration, and passing year), not by email. Every new claim is reviewed by an administrator before directory access is granted. Email/password and Google OAuth are both supported as sign-in methods, without creating duplicate alumni records for the same SSC identity.
+Alumni identity is defined by SSC roll and registration, not by email. Passing year is collected for review but is not part of uniqueness. Every new claim is reviewed by an administrator before directory access is granted. Email/password and Google OAuth are both supported as sign-in methods, without creating duplicate alumni records for the same SSC identity.
 
 ---
 
@@ -12,15 +12,55 @@ Alumni identity is defined by SSC credentials (roll, registration, and passing y
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **SSC-gated access**        | Registration and Google onboarding require roll, registration, and passing year, with optional certificate upload                                               |
 | **Admin review**            | Queue for approve / reject with notes, bulk actions, and audit history                                                                                          |
-| **One alumni, one account** | `VERIFIED` and `PENDING` SSC identities are unique; a Google signup that matches an existing alum is blocked and redirected to that account (masked email only) |
+| **One alumni, one account** | `VERIFIED` and `PENDING` SSC identities are unique on `(sscRoll, sscRegistration)`; a Google signup that matches an existing alum is blocked and redirected to that account (masked email only) |
 | **Authentication**          | Email/password and Google OAuth via Auth.js; verified members can link Google from settings without re-entering SSC                                             |
-| **Directory**               | Search by name, employer, department, batch year, and country (Postgres full-text + trigram)                                                                    |
-| **Profiles & privacy**      | Visibility levels `PUBLIC`, `MEMBERS_ONLY`, and `PRIVATE`; optional email and employer disclosure                                                               |
-| **Account controls**        | Profile and avatar editing, linked sign-in methods, data export, and account close                                                                              |
+| **Directory**               | Search by name, employer, role, or city; filter by department, batch year range, country, and blood group; grid/list views and sort (name, relevance, recent, year) |
+| **Profiles & privacy**      | SSC/HSC/university education, WhatsApp (required after approval), Facebook/website; visibility `PUBLIC`, `MEMBERS_ONLY`, and `PRIVATE`; optional email, employer, and gender disclosure |
+| **Account controls**        | Profile and avatar editing, linked sign-in methods, JSON/Excel export, and account close                                                                        |
 | **SSC confidentiality**     | Roll and registration numbers are visible to administrators only — never in the directory or on profiles                                                        |
 | **Authentication audit**    | Sign-ins, failed attempts, sign-outs, revocations, and expiries are recorded; a failed attempt stores a keyed HMAC of the address, never the address itself     |
 | **Live monitoring**         | `/admin/audit` streams events over a private Supabase Realtime channel, and stays a working paginated history when live updates are unavailable                 |
 | **Immediate revocation**    | Suspension, role change, password reset, and account close end sessions on the next request instead of waiting for the JWT to expire                            |
+
+---
+
+## Screenshots
+
+### Landing
+
+Entry point with campus hero, membership stats, verification and privacy highlights, and the three-step SSC onboarding path.
+
+![Landing](docs/screenshots/landing.jpg)
+
+### Alumni directory
+
+Searchable directory of verified alumni with filters for department, batch year, country, and blood group.
+
+![Alumni directory](docs/screenshots/directory.png)
+
+### Edit profile
+
+Alumni manage identity, SSC/HSC/university history, work, socials, privacy, linked sign-in methods, data export, and account close.
+
+![Edit profile](docs/screenshots/edit-profile.png)
+
+### Admin overview
+
+Dashboard of membership counts with shortcuts into the review queue and user management.
+
+![Admin overview](docs/screenshots/admin-overview.png)
+
+### Admin users
+
+Search and filter members; change role, suspend, or restore accounts.
+
+![Admin users](docs/screenshots/admin-users.png)
+
+### Admin audit log
+
+Live append-only log of sign-ins, sign-outs, session changes, and admin actions.
+
+![Admin audit log](docs/screenshots/admin-audit.png)
 
 ---
 
@@ -73,13 +113,16 @@ UNVERIFIED  →  submit SSC  →  PENDING  →  admin decision  →  VERIFIED
   - Match to an existing **VERIFIED** alum → stub is removed; user is sent to sign in with the registered account.
   - No match → `PENDING` verification request on the stub.
 
+WhatsApp is required after approval (`profileComplete`) before directory access.
+
 ### Auth model
 
-| Concept                          | Meaning                                                  |
-| -------------------------------- | -------------------------------------------------------- |
-| Auth.js `Account`                | This Google (or other OAuth) login is attached to a user |
-| `VerificationRequest` (VERIFIED) | This person is the same alum (SSC identity)              |
-| Email match alone                | Never used to auto-link accounts                         |
+| Concept                          | Meaning                                                                                         |
+| -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Auth.js `Account`                | This Google (or other OAuth) login is attached to a user                                        |
+| `VerificationRequest` (VERIFIED) | This person is the same alum (SSC identity)                                                   |
+| Google mailbox match             | Auth.js may attach Google to an existing `User` with that email (`allowDangerousEmailAccountLinking`) |
+| Facebook mailbox                 | Never used to auto-link; the Facebook provider is wired in Auth.js but not offered in the UI     |
 
 ### Audit and session lifecycle
 
@@ -125,26 +168,60 @@ Channel authorization does not trust the token alone. The RLS policy re-checks t
 
 ---
 
+## Getting started
+
+```bash
+cp .env.example .env   # fill secrets; see Environment below
+npm install
+npm run db:migrate
+npm run db:seed        # requires SEED_ADMIN_PASSWORD
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Seed creates the three SSC departments and one administrator (`alumnishksc@gmail.com`). It does not create dummy alumni.
+
+---
+
+## Scripts
+
+| Command              | Purpose                                              |
+| -------------------- | ---------------------------------------------------- |
+| `npm run dev`        | Next.js dev server                                    |
+| `npm run build`      | `prisma generate` then production build             |
+| `npm start`          | Production server                                    |
+| `npm run lint`       | ESLint                                                |
+| `npm run typecheck`  | `tsc --noEmit`                                       |
+| `npm run db:migrate` | Prisma Migrate (dev)                                |
+| `npm run db:deploy`  | Prisma Migrate (deploy)                              |
+| `npm run db:seed`    | Seed departments + admin                              |
+| `npm run test:unit`  | Node test runner on `src/lib/**/__tests__`           |
+| `npm run test:e2e`   | Playwright                                            |
+
+---
+
 ## Environment
 
-| Variable                                | Purpose                                                                                                                |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                          | Pooled Postgres URL for application runtime                                                                            |
-| `DIRECT_URL`                            | Direct / session URL for Prisma Migrate                                                                                |
-| `AUTH_SECRET`                           | Auth.js signing secret                                                                                                 |
-| `AUTH_URL`                              | Auth callback origin (production)                                                                                      |
-| `NEXT_PUBLIC_APP_URL`                   | Canonical application origin                                                                                           |
-| `NEXT_PUBLIC_SCHOOL_NAME`               | School brand string in the UI                                                                                          |
-| `NEXT_PUBLIC_SUPABASE_URL`              | Supabase project URL                                                                                                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`         | Supabase anon key (public)                                                                                             |
-| `SUPABASE_SERVICE_ROLE_KEY`             | Server-only Supabase access (Storage, privileged ops)                                                                  |
-| `AUDIT_HASH_SECRET`                     | **Required.** Keys the HMAC that pseudonymises an address on a failed sign-in. Generate with `openssl rand -base64 32` |
-| `SUPABASE_REALTIME_JWK`                 | ES256 private JWK for the live audit monitor (optional)                                                                |
-| `SUPABASE_REALTIME_JWT_TTL_SECONDS`     | Channel token lifetime, 60–3600 (default `600`)                                                                        |
-| `CRON_SECRET`                           | Bearer secret for the session expiry cron (optional)                                                                   |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth (optional)                                                                                                |
-| `BREVO_API_KEY` / `EMAIL_FROM`          | Transactional email (optional). `EMAIL_FROM` must be a sender verified in Brevo.                                       |
-| `SEED_ADMIN_PASSWORD`                   | **Seed only.** Password for `alumnishksc@gmail.com`. Required by `npm run db:seed`. Never commit the value.            |
+| Variable                                  | Purpose                                                                                                                |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                            | Pooled Postgres URL for application runtime                                                                            |
+| `DIRECT_URL`                               | Direct / session URL for Prisma Migrate                                                                                |
+| `AUTH_SECRET`                             | Auth.js signing secret                                                                                                 |
+| `AUTH_URL`                                | Auth callback origin (production)                                                                                      |
+| `NEXT_PUBLIC_APP_URL`                     | Canonical application origin                                                                                           |
+| `NEXT_PUBLIC_SCHOOL_NAME`                 | School brand string in the UI                                                                                          |
+| `NEXT_PUBLIC_SUPABASE_URL`                | Supabase project URL                                                                                                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`           | Supabase anon key (public)                                                                                             |
+| `SUPABASE_SERVICE_ROLE_KEY`               | Server-only Supabase access (Storage, privileged ops)                                                                  |
+| `SUPABASE_CERTIFICATE_BUCKET`              | Certificate bucket name (default `verification-documents`)                                                          |
+| `SUPABASE_AVATAR_BUCKET`                  | Avatar bucket name (default `avatars`)                                                                                |
+| `AUDIT_HASH_SECRET`                       | **Required.** Keys the HMAC that pseudonymises an address on a failed sign-in. Generate with `openssl rand -base64 32` |
+| `SUPABASE_REALTIME_JWK`                   | ES256 private JWK for the live audit monitor (optional)                                                                |
+| `SUPABASE_REALTIME_JWT_TTL_SECONDS`       | Channel token lifetime, 60–3600 (default `600`)                                                                        |
+| `CRON_SECRET`                             | Bearer secret for the session expiry cron (optional)                                                                   |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`   | Google OAuth (optional)                                                                                                |
+| `AUTH_FACEBOOK_ID` / `AUTH_FACEBOOK_SECRET` | Facebook OAuth (optional; provider is not shown in the UI)                                                            |
+| `BREVO_API_KEY` / `EMAIL_FROM`            | Transactional email (optional). `EMAIL_FROM` must be a sender verified in Brevo.                                       |
+| `SEED_ADMIN_PASSWORD`                     | **Seed only.** Password for `alumnishksc@gmail.com`. Required by `npm run db:seed`. Never commit the value.            |
 
 `AUDIT_HASH_SECRET` is validated at startup, so a deployment without it fails outright rather than degrading. The Realtime and cron variables are optional: without them the audit page is a paginated history and expiry is enforced without being recorded.
 
